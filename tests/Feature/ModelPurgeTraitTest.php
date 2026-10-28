@@ -4,6 +4,7 @@ namespace KaziOmar\SmartUpload\Tests\Feature;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use KaziOmar\SmartUpload\Tests\TestCase;
@@ -111,5 +112,31 @@ class ModelPurgeTraitTest extends TestCase
         // Force delete model -> file MUST be deleted!
         $user->forceDelete();
         $this->assertFalse(Storage::disk('public')->exists('avatars/soft-user.jpg'));
+    }
+
+    public function test_prevents_data_loss_by_not_deleting_old_file_if_model_update_rolls_back(): void
+    {
+        Storage::disk('public')->put('avatars/safe-orig.jpg', 'original');
+
+        $user = TestUser::create([
+            'name' => 'John Doe',
+            'avatar' => 'avatars/safe-orig.jpg',
+        ]);
+
+        $this->assertTrue(Storage::disk('public')->exists('avatars/safe-orig.jpg'));
+
+        try {
+            DB::transaction(function () use ($user) {
+                $user->update(['avatar' => 'avatars/new-uncommitted.jpg']);
+
+                // Simulate DB failure before commit
+                throw new \Exception('Failed SQL transaction!');
+            });
+        } catch (\Exception $e) {
+            // Expected
+        }
+
+        // Because transaction rolled back, old file MUST STILL EXIST on disk (No data loss!)
+        $this->assertTrue(Storage::disk('public')->exists('avatars/safe-orig.jpg'));
     }
 }

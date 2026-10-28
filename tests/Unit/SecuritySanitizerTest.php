@@ -32,7 +32,7 @@ class SecuritySanitizerTest extends TestCase
         $this->expectExceptionMessage('Potential path traversal or null-byte detected');
 
         $temp = tempnam(sys_get_temp_dir(), 'sec_');
-        $file = new UploadedFile($temp, '..etc..passwd.jpg', 'image/jpeg', null, true);
+        $file = new UploadedFile($temp, "passwd\0.jpg", 'image/jpeg', null, true);
         
         try {
             $this->sanitizer->sanitize($file);
@@ -61,6 +61,32 @@ class SecuritySanitizerTest extends TestCase
 
         $file = new UploadedFile($tempPath, 'bad.svg', 'image/svg+xml', null, true);
         $this->sanitizer->sanitize($file);
+    }
+
+    public function test_detects_svg_xss_with_arbitrary_event_handlers(): void
+    {
+        $this->expectException(SecurityException::class);
+        $this->expectExceptionMessage('SVG file contains potentially dangerous script content.');
+
+        $svgWithOnMouseOver = '<svg xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="40" onmouseover="alert(1)" /></svg>';
+        $tempPath = tempnam(sys_get_temp_dir(), 'svg2_');
+        file_put_contents($tempPath, $svgWithOnMouseOver);
+
+        $file = new UploadedFile($tempPath, 'bad_mouse.svg', 'image/svg+xml', null, true);
+        try {
+            $this->sanitizer->sanitize($file);
+        } finally {
+            @unlink($tempPath);
+        }
+    }
+
+    public function test_allows_legitimate_domain_names_with_dots_like_amazon_com_pdf(): void
+    {
+        $pdf = UploadedFile::fake()->create('amazon.com.invoice.pdf', 50, 'application/pdf');
+
+        // Should not throw SecurityException
+        $this->sanitizer->sanitize($pdf);
+        $this->assertTrue(true);
     }
 
     public function test_rejects_php_file_disguised_with_jpg_extension(): void

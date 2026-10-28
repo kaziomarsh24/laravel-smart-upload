@@ -32,7 +32,10 @@ class PruneUploadsCommand extends Command
      */
     public function handle(TempUploadManager $tempManager, ChunkManager $chunkManager): int
     {
-        $hours = (int) ($this->option('hours') ?: config('smart-upload.temporary.expiration_hours', 24));
+        $hours = $this->option('hours') !== null
+            ? (int) $this->option('hours')
+            : (int) config('smart-upload.temporary.expiration_hours', 24);
+
         $disk = config('smart-upload.temporary.disk', 'local');
         $tempDir = config('smart-upload.temporary.directory', 'smart-upload/temp');
 

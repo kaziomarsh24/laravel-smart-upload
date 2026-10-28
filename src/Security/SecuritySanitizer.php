@@ -10,7 +10,7 @@ use KaziOmar\SmartUpload\Exceptions\SecurityException;
  * Class SecuritySanitizer
  *
  * Inspects uploaded files for MIME spoofing, forbidden extensions, path traversal,
- * and malicious payloads.
+ * SVG XSS attacks, and malicious payloads.
  */
 class SecuritySanitizer
 {
@@ -22,8 +22,9 @@ class SecuritySanitizer
     ) {
         if (empty($this->disallowedExtensions)) {
             $this->disallowedExtensions = config('smart-upload.disallowed_extensions', [
-                'php', 'php3', 'php4', 'php5', 'phtml', 'exe', 'sh', 'bat', 'cgi',
-                'pl', 'py', 'jar', 'jsp', 'asp', 'aspx', 'vbs', 'com'
+                'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'pht', 'phar', 'phps',
+                'phtml', 'exe', 'sh', 'bat', 'cgi', 'pl', 'py', 'jar', 'jsp', 'asp',
+                'aspx', 'vbs', 'com', 'htaccess', 'html', 'htm'
             ]);
         }
     }
@@ -39,7 +40,7 @@ class SecuritySanitizer
         $originalName = $file->getClientOriginalName();
 
         // Check for null-byte or directory traversal attacks in filename
-        if (str_contains($originalName, "\0") || str_contains($originalName, '..') || str_contains($originalName, '/') || str_contains($originalName, '\\')) {
+        if (str_contains($originalName, "\0") || str_contains($originalName, '../') || str_contains($originalName, '..\\') || str_contains($originalName, '/') || str_contains($originalName, '\\')) {
             throw new SecurityException("Potential path traversal or null-byte detected in filename: {$originalName}");
         }
 
@@ -48,7 +49,7 @@ class SecuritySanitizer
             throw new SecurityException("Files with extension '.{$extension}' are forbidden for security reasons.");
         }
 
-        // Check for double extension spoofing (e.g., invoice.php.jpg)
+        // Check for dangerous double extension spoofing (e.g., invoice.php.jpg)
         if ($this->hasDisallowedDoubleExtension($originalName)) {
             throw new SecurityException("Dangerous multi-extension detected in filename: {$originalName}");
         }
@@ -76,7 +77,7 @@ class SecuritySanitizer
             throw new SecurityException("Claimed image extension '.{$extension}' does not match true MIME type: {$realMime}");
         }
 
-        // SVG specific XSS inspection
+        // SVG specific comprehensive XSS inspection
         if ($extension === 'svg' || $realMime === 'image/svg+xml') {
             $this->inspectSvg($file->getPathname());
         }
@@ -99,7 +100,7 @@ class SecuritySanitizer
     }
 
     /**
-     * Inspect SVG content for malicious script tags or event handlers.
+     * Inspect SVG content for malicious script tags, any on* event handlers, or foreign objects.
      *
      * @throws SecurityException
      */
@@ -114,10 +115,10 @@ class SecuritySanitizer
         $dangerousPatterns = [
             '/<script[\s\S]*?>[\s\S]*?<\/script>/i',
             '/javascript\s*:/i',
-            '/onload\s*=/i',
-            '/onerror\s*=/i',
-            '/onclick\s*=/i',
+            '/\bon\w+\s*=/i', // Matches all HTML event handlers: onload, onerror, onmouseover, onfocus, etc.
             '/<foreignObject/i',
+            '/data:text\/html/i',
+            '/<iframe/i',
         ];
 
         foreach ($dangerousPatterns as $pattern) {
@@ -135,8 +136,15 @@ class SecuritySanitizer
         $parts = explode('.', strtolower($filename));
         array_pop($parts); // Remove final extension
 
+        // Executable script extensions that should never appear in the middle of a filename
+        $middleBlacklist = [
+            'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'pht', 'phar', 'phps',
+            'phtml', 'exe', 'sh', 'bat', 'cgi', 'pl', 'py', 'jar', 'jsp', 'asp',
+            'aspx', 'vbs', 'htaccess'
+        ];
+
         foreach ($parts as $part) {
-            if (in_array($part, $this->disallowedExtensions, true)) {
+            if (in_array($part, $middleBlacklist, true)) {
                 return true;
             }
         }

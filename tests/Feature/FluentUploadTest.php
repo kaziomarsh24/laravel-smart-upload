@@ -189,4 +189,40 @@ class FluentUploadTest extends TestCase
         $this->assertEquals(0, $result->size);
         $this->assertTrue(Storage::disk('public')->exists($result->path));
     }
+
+    public function test_facade_does_not_leak_builder_state_across_calls(): void
+    {
+        $path1 = $this->createFakeImage('first.jpg', 800, 600);
+        $file1 = new UploadedFile($path1, 'first.jpg', 'image/jpeg', null, true);
+
+        // Call 1: Sets fit dimensions and custom quality
+        Upload::file($file1)->fit(150, 150)->quality(50);
+
+        $path2 = $this->createFakeImage('second.jpg', 800, 600);
+        $file2 = new UploadedFile($path2, 'second.jpg', 'image/jpeg', null, true);
+
+        // Call 2: Should have clean fresh state (not inheriting fit 150x150)
+        $result2 = Upload::file($file2)->save('avatars');
+
+        // Result2 should be scaled down according to default config, not cropped to 150x150
+        $this->assertTrue(Storage::disk('public')->exists($result2->path));
+
+        @unlink($path1);
+        @unlink($path2);
+    }
+
+    public function test_temporary_upload_sanitizes_files_and_blocks_malicious_scripts(): void
+    {
+        $this->expectException(\KaziOmar\SmartUpload\Exceptions\SecurityException::class);
+
+        $badFile = UploadedFile::fake()->create('backdoor.php', 10);
+        Upload::temp($badFile);
+    }
+
+    public function test_from_temp_blocks_arbitrary_path_traversal_outside_temp_dir(): void
+    {
+        $this->expectException(\KaziOmar\SmartUpload\Exceptions\SecurityException::class);
+
+        Upload::fromTemp('../../../etc/passwd');
+    }
 }

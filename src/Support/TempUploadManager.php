@@ -7,23 +7,34 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use KaziOmar\SmartUpload\DTO\UploadResult;
+use KaziOmar\SmartUpload\Exceptions\SecurityException;
 use KaziOmar\SmartUpload\Exceptions\UploadException;
+use KaziOmar\SmartUpload\Security\SecuritySanitizer;
 use Throwable;
 
 /**
  * Class TempUploadManager
  *
- * Manages temporary storage for two-step uploads (e.g., Livewire, React/Flutter dropzones)
- * and handles automatic pruning of expired temporary files across both local and remote disks.
+ * Manages temporary storage for two-step uploads with strict UUID validation,
+ * path boundary isolation, and automatic pruning.
  */
 class TempUploadManager
 {
+    public function __construct(
+        protected ?SecuritySanitizer $sanitizer = null
+    ) {
+        $this->sanitizer = $sanitizer ?: new SecuritySanitizer();
+    }
+
     /**
-     * Store a file temporarily.
+     * Store a file temporarily with security validation.
      */
     public function storeTemp(UploadedFile $file, string $disk, string $tempDirectory): UploadResult
     {
-        $extension = $file->getClientOriginalExtension();
+        // Enforce strict security sanitization on temporary uploads
+        $this->sanitizer->sanitize($file);
+
+        $extension = strtolower($file->getClientOriginalExtension());
         $uuid = Str::uuid()->toString();
         $filename = "{$uuid}.{$extension}";
         $path = trim($tempDirectory, '/') . '/' . $filename;
@@ -55,23 +66,43 @@ class TempUploadManager
 
     /**
      * Resolve a temporary file path or UUID into an UploadedFile instance,
-     * safely streaming remote files to a local temp buffer if needed.
+     * strictly ensuring the target resides inside the designated temp directory.
      */
     public function resolveTempFile(string $tempPathOrUuid, string $disk): UploadedFile
     {
+        // Block path traversal or directory escaping
+        if (str_contains($tempPathOrUuid, '..') || str_contains($tempPathOrUuid, "\0")) {
+            throw new SecurityException("Invalid temporary file identifier: {$tempPathOrUuid}");
+        }
+
         $storage = Storage::disk($disk);
+        $tempDir = trim(config('smart-upload.temporary.directory', 'smart-upload/temp'), '/');
         $path = $tempPathOrUuid;
 
-        if (!$storage->exists($path)) {
-            $tempDir = config('smart-upload.temporary.directory', 'smart-upload/temp');
-            $matchingFiles = $storage->files($tempDir);
-
-            foreach ($matchingFiles as $file) {
-                if (str_contains($file, $tempPathOrUuid)) {
-                    $path = $file;
-                    break;
+        // Check if user provided only a UUID (with or without extension)
+        if (!str_starts_with(trim($path, '/'), $tempDir)) {
+            $uuid = pathinfo($tempPathOrUuid, PATHINFO_FILENAME);
+            if (preg_match('/^[0-9a-fA-F-]{36}$/', $uuid)) {
+                $matches = $storage->files($tempDir);
+                $found = false;
+                foreach ($matches as $file) {
+                    if (basename($file, '.' . pathinfo($file, PATHINFO_EXTENSION)) === $uuid) {
+                        $path = $file;
+                        $found = true;
+                        break;
+                    }
                 }
+                if (!$found) {
+                    throw new UploadException("Temporary file with UUID {$uuid} not found.");
+                }
+            } else {
+                throw new SecurityException("Temporary upload path must reside inside [{$tempDir}] directory.");
             }
+        }
+
+        // Verify path is within temp directory
+        if (!str_starts_with(trim($path, '/'), $tempDir)) {
+            throw new SecurityException("Access to path outside temporary directory is forbidden: {$path}");
         }
 
         if (!$storage->exists($path)) {
@@ -85,7 +116,7 @@ class TempUploadManager
             $fullPath = null;
         }
 
-        // If storage driver is remote (S3/R2/Spaces), create a local copy for processing
+        // For remote cloud disks (S3, R2), copy to local temp buffer for processing
         if (!$fullPath || !file_exists($fullPath)) {
             $tempLocal = tempnam(sys_get_temp_dir(), 'smart_temp_');
             file_put_contents($tempLocal, $storage->get($path));
@@ -100,8 +131,6 @@ class TempUploadManager
 
     /**
      * Delete expired files from the temporary directory.
-     *
-     * @return int Number of deleted files
      */
     public function prune(string $disk, string $directory, int $expirationHours): int
     {

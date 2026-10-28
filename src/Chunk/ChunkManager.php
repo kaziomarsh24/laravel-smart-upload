@@ -10,6 +10,7 @@ use Illuminate\Support\Str;
 use KaziOmar\SmartUpload\Contracts\ChunkHandlerInterface;
 use KaziOmar\SmartUpload\DTO\UploadResult;
 use KaziOmar\SmartUpload\Exceptions\ChunkException;
+use KaziOmar\SmartUpload\Exceptions\SecurityException;
 use KaziOmar\SmartUpload\Security\SecuritySanitizer;
 use KaziOmar\SmartUpload\Support\TransactionShield;
 
@@ -17,7 +18,7 @@ use KaziOmar\SmartUpload\Support\TransactionShield;
  * Class ChunkManager
  *
  * Handles client-agnostic chunk uploads, tracks progress, and merges chunks
- * into a single unified file using low-memory file streams.
+ * into a single unified file using low-memory file streams with DoS protection.
  */
 class ChunkManager implements ChunkHandlerInterface
 {
@@ -42,7 +43,7 @@ class ChunkManager implements ChunkHandlerInterface
     }
 
     /**
-     * Parse incoming chunk data from Request.
+     * Parse incoming chunk data from Request with security validation.
      */
     public function receive(Request $request): static
     {
@@ -53,27 +54,42 @@ class ChunkManager implements ChunkHandlerInterface
         }
 
         // Auto-detect identifier from popular chunk upload libraries
-        $this->identifier = (string) ($request->input('dzuuid')
+        $rawIdentifier = (string) ($request->input('dzuuid')
             ?: $request->input('uuid')
             ?: $request->input('resumableIdentifier')
             ?: $request->input('qquuid')
             ?: $request->input('upload_id')
             ?: Str::slug($file->getClientOriginalName()));
 
-        $this->chunkIndex = (int) ($request->input('dzchunkindex')
-            ?? $request->input('chunk')
-            ?? ($request->input('resumableChunkNumber') ? $request->input('resumableChunkNumber') - 1 : 0));
+        // Sanitize and validate identifier (prevent path traversal or deletion attacks)
+        $cleanIdentifier = preg_replace('/[^a-zA-Z0-9_\-]/', '', $rawIdentifier);
+        if (empty($cleanIdentifier) || strlen($cleanIdentifier) < 4 || $cleanIdentifier === '.' || $cleanIdentifier === '..') {
+            throw new SecurityException("Invalid chunk upload identifier: {$rawIdentifier}");
+        }
+        $this->identifier = $cleanIdentifier;
 
         $this->totalChunks = (int) ($request->input('dztotalchunkcount')
             ?: $request->input('total_chunks')
             ?: $request->input('resumableTotalChunks')
             ?: 1);
 
+        // DoS limit guard
+        if ($this->totalChunks > 10000 || $this->totalChunks < 1) {
+            throw new ChunkException("Invalid total chunks count: {$this->totalChunks}");
+        }
+
+        $this->chunkIndex = (int) ($request->input('dzchunkindex')
+            ?? $request->input('chunk')
+            ?? ($request->input('resumableChunkNumber') ? $request->input('resumableChunkNumber') - 1 : 0));
+
+        if ($this->chunkIndex < 0 || $this->chunkIndex >= $this->totalChunks) {
+            throw new ChunkException("Chunk index {$this->chunkIndex} is out of bounds (Total: {$this->totalChunks}).");
+        }
+
         $this->originalFilename = (string) ($request->input('dzfilename')
             ?: $request->input('filename')
             ?: $file->getClientOriginalName());
 
-        // Store this chunk part
         $this->storeChunkPart($file);
 
         return $this;
@@ -95,7 +111,20 @@ class ChunkManager implements ChunkHandlerInterface
 
         $savedParts = count($storage->files("{$this->chunkDir}/{$this->identifier}"));
         $this->percentage = round(($savedParts / max(1, $this->totalChunks)) * 100, 2);
-        $this->finished = ($savedParts >= $this->totalChunks);
+
+        // Verify all expected sequential parts are present before declaring finished
+        if ($savedParts >= $this->totalChunks) {
+            $allPresent = true;
+            for ($i = 0; $i < $this->totalChunks; $i++) {
+                if (!$storage->exists("{$this->chunkDir}/{$this->identifier}/part_{$i}")) {
+                    $allPresent = false;
+                    break;
+                }
+            }
+            $this->finished = $allPresent;
+        } else {
+            $this->finished = false;
+        }
     }
 
     public function isComplete(): bool

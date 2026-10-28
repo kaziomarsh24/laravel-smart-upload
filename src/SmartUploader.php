@@ -4,9 +4,9 @@ namespace KaziOmar\SmartUpload;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use KaziOmar\SmartUpload\Chunk\ChunkManager;
 use KaziOmar\SmartUpload\Contracts\UploaderInterface;
 use KaziOmar\SmartUpload\DTO\UploadCollection;
 use KaziOmar\SmartUpload\DTO\UploadResult;
@@ -33,6 +33,8 @@ class SmartUploader implements UploaderInterface
     protected ?array $fitDimensions = null;
     protected ?string $replaceTarget = null;
     protected bool $isTemporary = false;
+    protected ?string $promotedTempPath = null;
+    protected ?string $promotedTempDisk = null;
 
     public function __construct(
         protected ImageProcessor $imageProcessor = new ImageProcessor(),
@@ -132,6 +134,13 @@ class SmartUploader implements UploaderInterface
         return $this;
     }
 
+    public function markPromotedFromTemp(string $tempPath, string $tempDisk): static
+    {
+        $this->promotedTempPath = $tempPath;
+        $this->promotedTempDisk = $tempDisk;
+        return $this;
+    }
+
     public function save(string $directory = ''): UploadResult|UploadCollection
     {
         if (empty($this->files)) {
@@ -140,9 +149,21 @@ class SmartUploader implements UploaderInterface
 
         $results = array_map(fn (UploadedFile $file) => $this->processAndSave($file, $directory), $this->files);
 
-        // Auto delete old file if replacement requested
+        // Delete old replaced file with transaction rollback protection
         if ($this->replaceTarget !== null) {
-            $this->deleteFile($this->replaceTarget, $this->resolveDisk());
+            $target = $this->replaceTarget;
+            $disk = $this->resolveDisk();
+
+            if (DB::transactionLevel() > 0) {
+                DB::afterCommit(fn () => $this->deleteFile($target, $disk));
+            } else {
+                $this->deleteFile($target, $disk);
+            }
+        }
+
+        // Clean up promoted temporary file
+        if ($this->promotedTempPath !== null && $this->promotedTempDisk !== null) {
+            Storage::disk($this->promotedTempDisk)->delete($this->promotedTempPath);
         }
 
         return count($results) === 1 ? $results[0] : new UploadCollection($results);
@@ -173,7 +194,7 @@ class SmartUploader implements UploaderInterface
                 $image = $this->imageProcessor->scaleDown($image, config('smart-upload.max_width'), config('smart-upload.max_height'));
             }
 
-            $format = $shouldWebp ? 'webp' : $file->getClientOriginalExtension();
+            $format = $shouldWebp ? 'webp' : strtolower($file->getClientOriginalExtension());
             $quality = $this->quality ?? config('smart-upload.quality', 85);
             $encoded = $this->imageProcessor->encode($image, $format, $quality);
 
@@ -182,16 +203,20 @@ class SmartUploader implements UploaderInterface
 
             Storage::disk($disk)->put($path, $encoded);
             $size = strlen($encoded);
-            $mime = "image/{$format}";
+            $mime = $format === 'jpg' ? 'image/jpeg' : "image/{$format}";
         } else {
             $extension = $file->getClientOriginalExtension();
             $filename = $this->sanitizer->generateUniqueName($file, $extension);
             $path = $targetDir ? "{$targetDir}/{$filename}" : $filename;
 
             $stream = fopen($file->getPathname(), 'r');
-            Storage::disk($disk)->put($path, $stream);
-            if (is_resource($stream)) {
-                fclose($stream);
+            if ($stream !== false) {
+                Storage::disk($disk)->put($path, $stream);
+                if (is_resource($stream)) {
+                    fclose($stream);
+                }
+            } else {
+                Storage::disk($disk)->put($path, file_get_contents($file->getPathname()) ?: '');
             }
 
             $size = $file->getSize() ?: 0;
@@ -229,11 +254,13 @@ class SmartUploader implements UploaderInterface
 
         if (Str::startsWith($pathOrUrl, ['http://', 'https://'])) {
             $parsed = parse_url($pathOrUrl, PHP_URL_PATH);
-            $actualPath = str_replace('/storage/', '', $parsed ?: '');
+            $decoded = urldecode($parsed ?: '');
+            $actualPath = preg_replace('#^/?storage/#', '', $decoded);
         }
 
         $actualPath = ltrim($actualPath, '/');
         $storage = Storage::disk($targetDisk);
+
         return $storage->exists($actualPath) ? $storage->delete($actualPath) : false;
     }
 

@@ -79,12 +79,19 @@ class ImageProcessor
      */
     public function encode(ImageInterface $image, string $format, int $quality = 85): string
     {
-        $encoded = match (strtolower($format)) {
+        $normalizedFormat = strtolower($format);
+
+        if ($normalizedFormat === 'jpg') {
+            $normalizedFormat = 'jpeg';
+        }
+
+        $encoded = match ($normalizedFormat) {
             'webp' => $image->toWebp($quality),
-            'jpeg', 'jpg' => $image->toJpeg($quality),
+            'jpeg' => $image->toJpeg($quality),
             'png' => $image->toPng(),
             'gif' => $image->toGif(),
             'avif' => function_exists('imageavif') ? $image->toAvif($quality) : $image->toWebp($quality),
+            'bmp' => method_exists($image, 'toBitmap') ? $image->toBitmap() : $image->toPng(),
             default => $image->toWebp($quality),
         };
 

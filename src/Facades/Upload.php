@@ -7,6 +7,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Facade;
 use KaziOmar\SmartUpload\Chunk\ChunkManager;
 use KaziOmar\SmartUpload\DTO\UploadResult;
+use KaziOmar\SmartUpload\Security\SecuritySanitizer;
 use KaziOmar\SmartUpload\SmartUploader;
 use KaziOmar\SmartUpload\Support\TempUploadManager;
 
@@ -25,6 +26,12 @@ use KaziOmar\SmartUpload\Support\TempUploadManager;
  */
 class Upload extends Facade
 {
+    /**
+     * Disable facade caching to prevent builder state leaking across requests
+     * or in long-running environments like Laravel Octane.
+     */
+    protected static $cached = false;
+
     protected static function getFacadeAccessor(): string
     {
         return 'smart-upload';
@@ -40,15 +47,14 @@ class Upload extends Facade
     }
 
     /**
-     * Immediately save a file as temporary and return its UploadResult DTO.
+     * Immediately sanitize and save a file as temporary and return its UploadResult DTO.
      */
     public static function temp(UploadedFile $file, ?string $disk = null): UploadResult
     {
-        $uploader = static::getFacadeRoot();
         $targetDisk = $disk ?: config('smart-upload.temporary.disk', 'local');
         $tempDir = config('smart-upload.temporary.directory', 'smart-upload/temp');
 
-        $manager = new TempUploadManager();
+        $manager = new TempUploadManager(new SecuritySanitizer());
         return $manager->storeTemp($file, $targetDisk, $tempDir);
     }
 
@@ -58,11 +64,14 @@ class Upload extends Facade
     public static function fromTemp(string $tempPathOrUuid, ?string $disk = null): SmartUploader
     {
         $targetDisk = $disk ?: config('smart-upload.temporary.disk', 'local');
-        $manager = new TempUploadManager();
+        $manager = new TempUploadManager(new SecuritySanitizer());
         $file = $manager->resolveTempFile($tempPathOrUuid, $targetDisk);
 
         /** @var SmartUploader $uploader */
         $uploader = app('smart-upload');
-        return $uploader->file($file);
+        $uploader->file($file);
+        $uploader->markPromotedFromTemp($tempPathOrUuid, $targetDisk);
+
+        return $uploader;
     }
 }
