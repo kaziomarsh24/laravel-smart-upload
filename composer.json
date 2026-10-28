@@ -11,7 +11,7 @@
         "security",
         "thekaziomar"
     ],
-    "homepage": "https://github.com/thekaziomar/laravel-smart-upload",
+    "homepage": "https://github.com/kaziomarsh24/laravel-smart-upload",
     "license": "MIT",
     "authors": [
         {
@@ -29,8 +29,8 @@
         "intervention/image": "^3.0"
     },
     "require-dev": {
-        "orchestra/testbench": "^9.0 || ^10.0",
-        "phpunit/phpunit": "^10.5 || ^11.0"
+        "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
+        "phpunit/phpunit": "^10.0 || ^11.0"
     },
     "autoload": {
         "psr-4": {
@@ -58,6 +58,9 @@
             "pestphp/pest-plugin": true
         }
     },
-    "minimum-stability": "dev",
-    "prefer-stable": true
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "scripts": {
+        "test": "vendor/bin/phpunit"
+    }
 }
