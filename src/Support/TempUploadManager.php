@@ -8,12 +8,13 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use KaziOmar\SmartUpload\DTO\UploadResult;
 use KaziOmar\SmartUpload\Exceptions\UploadException;
+use Throwable;
 
 /**
  * Class TempUploadManager
  *
  * Manages temporary storage for two-step uploads (e.g., Livewire, React/Flutter dropzones)
- * and handles automatic pruning of expired temporary files.
+ * and handles automatic pruning of expired temporary files across both local and remote disks.
  */
 class TempUploadManager
 {
@@ -28,9 +29,13 @@ class TempUploadManager
         $path = trim($tempDirectory, '/') . '/' . $filename;
 
         $stream = fopen($file->getPathname(), 'r');
-        Storage::disk($disk)->put($path, $stream);
-        if (is_resource($stream)) {
-            fclose($stream);
+        if ($stream !== false) {
+            Storage::disk($disk)->put($path, $stream);
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        } else {
+            Storage::disk($disk)->put($path, file_get_contents($file->getPathname()) ?: '');
         }
 
         $url = Storage::disk($disk)->url($path);
@@ -49,7 +54,8 @@ class TempUploadManager
     }
 
     /**
-     * Resolve a temporary file path or UUID into an UploadedFile instance.
+     * Resolve a temporary file path or UUID into an UploadedFile instance,
+     * safely streaming remote files to a local temp buffer if needed.
      */
     public function resolveTempFile(string $tempPathOrUuid, string $disk): UploadedFile
     {
@@ -57,7 +63,6 @@ class TempUploadManager
         $path = $tempPathOrUuid;
 
         if (!$storage->exists($path)) {
-            // Check if user passed just a UUID
             $tempDir = config('smart-upload.temporary.directory', 'smart-upload/temp');
             $matchingFiles = $storage->files($tempDir);
 
@@ -73,7 +78,20 @@ class TempUploadManager
             throw new UploadException("Temporary file not found: {$tempPathOrUuid}");
         }
 
-        $fullPath = $storage->path($path);
+        $fullPath = null;
+        try {
+            $fullPath = $storage->path($path);
+        } catch (Throwable) {
+            $fullPath = null;
+        }
+
+        // If storage driver is remote (S3/R2/Spaces), create a local copy for processing
+        if (!$fullPath || !file_exists($fullPath)) {
+            $tempLocal = tempnam(sys_get_temp_dir(), 'smart_temp_');
+            file_put_contents($tempLocal, $storage->get($path));
+            $fullPath = $tempLocal;
+        }
+
         $originalName = basename($path);
         $mime = mime_content_type($fullPath) ?: 'application/octet-stream';
 

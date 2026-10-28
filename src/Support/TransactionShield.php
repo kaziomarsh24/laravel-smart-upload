@@ -2,6 +2,7 @@
 
 namespace KaziOmar\SmartUpload\Support;
 
+use Illuminate\Database\Events\TransactionCommitted;
 use Illuminate\Database\Events\TransactionRolledBack;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -11,7 +12,7 @@ use Illuminate\Support\Facades\Storage;
  * Class TransactionShield
  *
  * Prevents orphaned "ghost files" on storage disks if a database transaction
- * fails or rolls back.
+ * fails or rolls back, while remaining safe in Octane and queue worker environments.
  */
 class TransactionShield
 {
@@ -31,11 +32,19 @@ class TransactionShield
         }
 
         $transactionLevel = DB::transactionLevel();
+        $handled = false;
 
-        // Listen for transaction rollback event
-        Event::listen(TransactionRolledBack::class, function () use ($disk, $path, $transactionLevel) {
-            // Check if transaction has fallen below the level where file was written
-            if (DB::transactionLevel() < $transactionLevel) {
+        // Disarm the shield when this transaction commits
+        Event::listen(TransactionCommitted::class, function () use (&$handled, $transactionLevel) {
+            if (!$handled && DB::transactionLevel() < $transactionLevel) {
+                $handled = true;
+            }
+        });
+
+        // Trigger rollback purge only if this specific transaction rolled back
+        Event::listen(TransactionRolledBack::class, function () use (&$handled, $disk, $path, $transactionLevel) {
+            if (!$handled && DB::transactionLevel() < $transactionLevel) {
+                $handled = true;
                 if (Storage::disk($disk)->exists($path)) {
                     Storage::disk($disk)->delete($path);
                 }

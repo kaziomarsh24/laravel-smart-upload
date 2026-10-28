@@ -48,6 +48,11 @@ class SecuritySanitizer
             throw new SecurityException("Files with extension '.{$extension}' are forbidden for security reasons.");
         }
 
+        // Check for double extension spoofing (e.g., invoice.php.jpg)
+        if ($this->hasDisallowedDoubleExtension($originalName)) {
+            throw new SecurityException("Dangerous multi-extension detected in filename: {$originalName}");
+        }
+
         // Real MIME type verification (Magic Bytes check via Fileinfo)
         $realMime = $this->detectRealMime($file->getPathname());
 
@@ -65,9 +70,10 @@ class SecuritySanitizer
             throw new SecurityException("Malicious file payload detected. True MIME type: {$realMime}");
         }
 
-        // Check for double extension spoofing (e.g., invoice.php.jpg)
-        if ($this->hasDisallowedDoubleExtension($originalName)) {
-            throw new SecurityException("Dangerous multi-extension detected in filename: {$originalName}");
+        // Verify that claimed images actually have an image MIME signature
+        $imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tif', 'tiff', 'avif'];
+        if (in_array($extension, $imageExtensions, true) && !str_starts_with($realMime, 'image/')) {
+            throw new SecurityException("Claimed image extension '.{$extension}' does not match true MIME type: {$realMime}");
         }
 
         // SVG specific XSS inspection

@@ -44,7 +44,7 @@ class SmartUploader implements UploaderInterface
     public function file(UploadedFile|string $file): static
     {
         if (is_string($file)) {
-            $file = new UploadedFile($file, basename($file));
+            $file = new UploadedFile($file, basename($file), null, null, true);
         }
 
         $this->files = [$file];
@@ -54,7 +54,7 @@ class SmartUploader implements UploaderInterface
     public function files(array $files): static
     {
         $this->files = array_map(function ($file) {
-            return is_string($file) ? new UploadedFile($file, basename($file)) : $file;
+            return is_string($file) ? new UploadedFile($file, basename($file), null, null, true) : $file;
         }, $files);
 
         return $this;
@@ -232,6 +232,7 @@ class SmartUploader implements UploaderInterface
             $actualPath = str_replace('/storage/', '', $parsed ?: '');
         }
 
+        $actualPath = ltrim($actualPath, '/');
         $storage = Storage::disk($targetDisk);
         return $storage->exists($actualPath) ? $storage->delete($actualPath) : false;
     }

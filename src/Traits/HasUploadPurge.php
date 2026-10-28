@@ -18,14 +18,14 @@ trait HasUploadPurge
      */
     public static function bootHasUploadPurge(): void
     {
-        // When updating, delete old files if their attribute changed
-        static::updating(function (Model $model) {
+        // When updated successfully in database, delete old replaced files
+        static::updated(function (Model $model) {
             $purgeable = $model->getPurgeableFiles();
 
             foreach ($purgeable as $attribute) {
-                if ($model->isDirty($attribute)) {
+                if ($model->wasChanged($attribute)) {
                     $original = $model->getOriginal($attribute);
-                    if ($original) {
+                    if ($original && $original !== $model->getAttribute($attribute)) {
                         Upload::delete($original);
                     }
                 }

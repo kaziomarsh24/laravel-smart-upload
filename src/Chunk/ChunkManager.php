@@ -140,43 +140,46 @@ class ChunkManager implements ChunkHandlerInterface
 
         fclose($mergedHandle);
 
-        // Security check on merged file
-        $extension = pathinfo($this->originalFilename, PATHINFO_EXTENSION);
-        $mime = mime_content_type($tempMergedPath) ?: 'application/octet-stream';
-        $uploaded = new UploadedFile($tempMergedPath, $this->originalFilename, $mime, null, true);
-        $this->sanitizer->sanitize($uploaded);
+        try {
+            // Security check on merged file
+            $extension = pathinfo($this->originalFilename, PATHINFO_EXTENSION);
+            $mime = mime_content_type($tempMergedPath) ?: 'application/octet-stream';
+            $uploaded = new UploadedFile($tempMergedPath, $this->originalFilename, $mime, null, true);
+            $this->sanitizer->sanitize($uploaded);
 
-        // Save to target storage
-        $safeName = $this->sanitizer->generateUniqueName($this->originalFilename, $extension);
-        $finalPath = trim($directory, '/') ? trim($directory, '/') . '/' . $safeName : $safeName;
+            // Save to target storage
+            $safeName = $this->sanitizer->generateUniqueName($this->originalFilename, $extension);
+            $finalPath = trim($directory, '/') ? trim($directory, '/') . '/' . $safeName : $safeName;
 
-        $targetStorage = Storage::disk($finalDisk);
-        $readStream = fopen($tempMergedPath, 'r');
-        $targetStorage->put($finalPath, $readStream);
-        if (is_resource($readStream)) {
-            fclose($readStream);
+            $targetStorage = Storage::disk($finalDisk);
+            $readStream = fopen($tempMergedPath, 'r');
+            $targetStorage->put($finalPath, $readStream);
+            if (is_resource($readStream)) {
+                fclose($readStream);
+            }
+
+            $size = filesize($tempMergedPath);
+
+            // Clean up temporary chunk parts
+            $storage->deleteDirectory("{$this->chunkDir}/{$this->identifier}");
+
+            // Guard against database transaction rollbacks
+            TransactionShield::guard($finalDisk, $finalPath);
+
+            return new UploadResult(
+                path: $finalPath,
+                url: $targetStorage->url($finalPath),
+                filename: $safeName,
+                originalName: $this->originalFilename,
+                extension: $extension,
+                mimeType: $mime,
+                size: $size ?: 0,
+                disk: $finalDisk,
+                isTemporary: false
+            );
+        } finally {
+            @unlink($tempMergedPath);
         }
-
-        $size = filesize($tempMergedPath);
-        @unlink($tempMergedPath);
-
-        // Clean up temporary chunk parts
-        $storage->deleteDirectory("{$this->chunkDir}/{$this->identifier}");
-
-        // Guard against database transaction rollbacks
-        TransactionShield::guard($finalDisk, $finalPath);
-
-        return new UploadResult(
-            path: $finalPath,
-            url: $targetStorage->url($finalPath),
-            filename: $safeName,
-            originalName: $this->originalFilename,
-            extension: $extension,
-            mimeType: $mime,
-            size: $size ?: 0,
-            disk: $finalDisk,
-            isTemporary: false
-        );
     }
 
     /**
