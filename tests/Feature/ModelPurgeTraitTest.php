@@ -18,6 +18,16 @@ class TestUser extends Model
     protected array $purgeableFiles = ['avatar', 'cover'];
 }
 
+class SoftDeletedTestUser extends Model
+{
+    use \Illuminate\Database\Eloquent\SoftDeletes;
+    use HasUploadPurge;
+
+    protected $table = 'soft_test_users';
+    protected $guarded = [];
+    protected array $purgeableFiles = ['avatar'];
+}
+
 class ModelPurgeTraitTest extends TestCase
 {
     protected function setUp(): void
@@ -29,6 +39,14 @@ class ModelPurgeTraitTest extends TestCase
             $table->string('name')->nullable();
             $table->string('avatar')->nullable();
             $table->string('cover')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('soft_test_users', function (Blueprint $table) {
+            $table->id();
+            $table->string('name')->nullable();
+            $table->string('avatar')->nullable();
+            $table->softDeletes();
             $table->timestamps();
         });
     }
@@ -73,5 +91,25 @@ class ModelPurgeTraitTest extends TestCase
         // Both files should be auto-purged from storage
         $this->assertFalse(Storage::disk('public')->exists('avatars/user-avatar.jpg'));
         $this->assertFalse(Storage::disk('public')->exists('covers/user-cover.jpg'));
+    }
+
+    public function test_respects_soft_deletes_and_only_purges_on_force_delete(): void
+    {
+        Storage::disk('public')->put('avatars/soft-user.jpg', 'pic');
+
+        $user = SoftDeletedTestUser::create([
+            'name' => 'Soft User',
+            'avatar' => 'avatars/soft-user.jpg',
+        ]);
+
+        $this->assertTrue(Storage::disk('public')->exists('avatars/soft-user.jpg'));
+
+        // Soft delete model -> file must NOT be deleted yet!
+        $user->delete();
+        $this->assertTrue(Storage::disk('public')->exists('avatars/soft-user.jpg'));
+
+        // Force delete model -> file MUST be deleted!
+        $user->forceDelete();
+        $this->assertFalse(Storage::disk('public')->exists('avatars/soft-user.jpg'));
     }
 }

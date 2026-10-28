@@ -137,4 +137,56 @@ class FluentUploadTest extends TestCase
         $this->assertFalse(Upload::delete(null));
         $this->assertFalse(Upload::delete('non/existent/file.jpg'));
     }
+
+    public function test_routes_upload_to_custom_disk_like_s3(): void
+    {
+        $pdf = UploadedFile::fake()->create('contract.pdf', 50, 'application/pdf');
+
+        $result = Upload::file($pdf)->disk('s3')->save('contracts');
+
+        $this->assertEquals('s3', $result->disk);
+        $this->assertTrue(Storage::disk('s3')->exists($result->path));
+        $this->assertFalse(Storage::disk('public')->exists($result->path));
+    }
+
+    public function test_retains_original_format_when_explicitly_requested(): void
+    {
+        $realPath = $this->createFakeImage('original.png');
+        $file = new UploadedFile($realPath, 'original.png', 'image/png', null, true);
+
+        $result = Upload::file($file)->keepOriginalFormat()->save('icons');
+
+        $this->assertEquals('png', $result->extension);
+        $this->assertTrue(Storage::disk('public')->exists($result->path));
+
+        @unlink($realPath);
+    }
+
+    public function test_throws_exception_when_saving_without_files(): void
+    {
+        $this->expectException(\KaziOmar\SmartUpload\Exceptions\UploadException::class);
+        $this->expectExceptionMessage('No file specified to upload');
+
+        (new \KaziOmar\SmartUpload\SmartUploader())->save('avatars');
+    }
+
+    public function test_throws_exception_for_undefined_preset(): void
+    {
+        $this->expectException(\KaziOmar\SmartUpload\Exceptions\UploadException::class);
+        $this->expectExceptionMessage("Undefined upload preset: 'non_existent_preset'");
+
+        $file = UploadedFile::fake()->create('test.jpg', 10);
+        Upload::file($file)->preset('non_existent_preset');
+    }
+
+    public function test_handles_zero_byte_raw_file_upload_cleanly(): void
+    {
+        $emptyFile = UploadedFile::fake()->create('empty.txt', 0, 'text/plain');
+
+        $result = Upload::file($emptyFile)->save('logs');
+
+        $this->assertInstanceOf(UploadResult::class, $result);
+        $this->assertEquals(0, $result->size);
+        $this->assertTrue(Storage::disk('public')->exists($result->path));
+    }
 }

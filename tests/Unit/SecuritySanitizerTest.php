@@ -63,6 +63,22 @@ class SecuritySanitizerTest extends TestCase
         $this->sanitizer->sanitize($file);
     }
 
+    public function test_rejects_php_file_disguised_with_jpg_extension(): void
+    {
+        $this->expectException(SecurityException::class);
+        $this->expectExceptionMessage('Malicious file payload detected. True MIME type');
+
+        $temp = tempnam(sys_get_temp_dir(), 'php_');
+        file_put_contents($temp, '<?php echo "evil payload"; ?>');
+        $file = new UploadedFile($temp, 'photo.jpg', 'image/jpeg', null, true);
+
+        try {
+            $this->sanitizer->sanitize($file);
+        } finally {
+            @unlink($temp);
+        }
+    }
+
     public function test_generates_safe_unique_slugged_filenames(): void
     {
         $file = UploadedFile::fake()->create('My Special Photo 2026!.png', 50);
