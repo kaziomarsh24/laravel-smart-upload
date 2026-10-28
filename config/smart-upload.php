@@ -57,6 +57,8 @@ return [
         'directory' => env('SMART_UPLOAD_TEMP_DIR', 'smart-upload/temp'),
         'chunk_directory' => env('SMART_UPLOAD_CHUNK_DIR', 'smart-upload/chunks'),
         'expiration_hours' => (int) env('SMART_UPLOAD_TEMP_EXPIRES', 24),
+        'max_chunks' => (int) env('SMART_UPLOAD_MAX_CHUNKS', 10000),
+        'max_chunk_size' => (int) env('SMART_UPLOAD_MAX_CHUNK_SIZE', 52428800), // 50MB per chunk
     ],
 
     /*
@@ -74,8 +76,9 @@ return [
     | Explicit blacklist of executable script extensions that will be rejected.
     */
     'disallowed_extensions' => [
-        'php', 'php3', 'php4', 'php5', 'phtml', 'exe', 'sh', 'bat', 'cgi',
-        'pl', 'py', 'jar', 'jsp', 'asp', 'aspx', 'vbs', 'com'
+        'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'pht', 'phar', 'phps',
+        'phtml', 'exe', 'sh', 'bat', 'cgi', 'pl', 'py', 'jar', 'jsp', 'asp',
+        'aspx', 'vbs', 'com', 'htaccess', 'html', 'htm'
     ],
 
     /*

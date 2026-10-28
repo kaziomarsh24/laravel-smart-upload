@@ -13,6 +13,7 @@ use KaziOmar\SmartUpload\DTO\UploadResult;
 use KaziOmar\SmartUpload\Exceptions\UploadException;
 use KaziOmar\SmartUpload\Processors\ImageProcessor;
 use KaziOmar\SmartUpload\Security\SecuritySanitizer;
+use KaziOmar\SmartUpload\Support\TempUploadedFile;
 use KaziOmar\SmartUpload\Support\TempUploadManager;
 use KaziOmar\SmartUpload\Support\TransactionShield;
 
@@ -33,7 +34,7 @@ class SmartUploader implements UploaderInterface
     protected ?array $fitDimensions = null;
     protected ?string $replaceTarget = null;
     protected bool $isTemporary = false;
-    protected ?string $promotedTempPath = null;
+    protected ?string $promotedTempStoragePath = null;
     protected ?string $promotedTempDisk = null;
 
     public function __construct(
@@ -134,9 +135,9 @@ class SmartUploader implements UploaderInterface
         return $this;
     }
 
-    public function markPromotedFromTemp(string $tempPath, string $tempDisk): static
+    public function markPromotedFromTemp(string $resolvedPath, string $tempDisk): static
     {
-        $this->promotedTempPath = $tempPath;
+        $this->promotedTempStoragePath = $resolvedPath;
         $this->promotedTempDisk = $tempDisk;
         return $this;
     }
@@ -161,9 +162,16 @@ class SmartUploader implements UploaderInterface
             }
         }
 
-        // Clean up promoted temporary file
-        if ($this->promotedTempPath !== null && $this->promotedTempDisk !== null) {
-            Storage::disk($this->promotedTempDisk)->delete($this->promotedTempPath);
+        // Clean up promoted temporary files and local buffers
+        foreach ($this->files as $file) {
+            if ($file instanceof TempUploadedFile) {
+                if ($this->promotedTempDisk !== null && !empty($file->resolvedStoragePath)) {
+                    Storage::disk($this->promotedTempDisk)->delete($file->resolvedStoragePath);
+                }
+                if (!empty($file->localBufferPath) && file_exists($file->localBufferPath)) {
+                    @unlink($file->localBufferPath);
+                }
+            }
         }
 
         return count($results) === 1 ? $results[0] : new UploadCollection($results);
@@ -194,16 +202,17 @@ class SmartUploader implements UploaderInterface
                 $image = $this->imageProcessor->scaleDown($image, config('smart-upload.max_width'), config('smart-upload.max_height'));
             }
 
-            $format = $shouldWebp ? 'webp' : strtolower($file->getClientOriginalExtension());
+            $requestedFormat = $shouldWebp ? 'webp' : strtolower($file->getClientOriginalExtension());
             $quality = $this->quality ?? config('smart-upload.quality', 85);
-            $encoded = $this->imageProcessor->encode($image, $format, $quality);
 
-            $filename = $this->sanitizer->generateUniqueName($file, $format);
+            [$encoded, $actualFormat] = $this->imageProcessor->encodeSafe($image, $requestedFormat, $quality);
+
+            $filename = $this->sanitizer->generateUniqueName($file, $actualFormat);
             $path = $targetDir ? "{$targetDir}/{$filename}" : $filename;
 
             Storage::disk($disk)->put($path, $encoded);
             $size = strlen($encoded);
-            $mime = $format === 'jpg' ? 'image/jpeg' : "image/{$format}";
+            $mime = $this->imageProcessor->getMimeForFormat($actualFormat);
         } else {
             $extension = $file->getClientOriginalExtension();
             $filename = $this->sanitizer->generateUniqueName($file, $extension);

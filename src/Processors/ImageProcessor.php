@@ -7,12 +7,13 @@ use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Interfaces\ImageInterface;
+use Throwable;
 
 /**
  * Class ImageProcessor
  *
  * Handles image manipulation (scaleDown, fit/cover, WebP conversion, auto-orientation)
- * using Intervention Image v3 with automatic GD/Imagick driver detection.
+ * using Intervention Image v3 with automatic GD/Imagick driver detection and safe format fallbacks.
  */
 class ImageProcessor
 {
@@ -34,7 +35,7 @@ class ImageProcessor
     }
 
     /**
-     * Check if an uploaded file is a manipulable image.
+     * Check if an uploaded file is a manipulable raster image.
      */
     public function isImage(UploadedFile $file): bool
     {
@@ -54,8 +55,7 @@ class ImageProcessor
     }
 
     /**
-     * Scale down an image so width/height do not exceed max constraints,
-     * maintaining aspect ratio and never upsizing smaller images.
+     * Scale down an image preserving aspect ratio without enlarging smaller images.
      */
     public function scaleDown(ImageInterface $image, ?int $maxWidth = null, ?int $maxHeight = null): ImageInterface
     {
@@ -75,26 +75,63 @@ class ImageProcessor
     }
 
     /**
-     * Encode the image to the specified format with given quality.
+     * Safely encode an image to the requested format, returning both the encoded binary
+     * and the actual confirmed format extension.
+     *
+     * @return array{0: string, 1: string} [encodedString, actualFormat]
+     */
+    public function encodeSafe(ImageInterface $image, string $format, int $quality = 85): array
+    {
+        $target = strtolower($format);
+
+        if ($target === 'jpg') {
+            $target = 'jpeg';
+        }
+
+        try {
+            return match ($target) {
+                'webp' => [(string) $image->toWebp($quality), 'webp'],
+                'jpeg' => [(string) $image->toJpeg($quality), 'jpeg'],
+                'png' => [(string) $image->toPng(), 'png'],
+                'gif' => [(string) $image->toGif(), 'gif'],
+                'avif' => function_exists('imageavif') ? [(string) $image->toAvif($quality), 'avif'] : [(string) $image->toWebp($quality), 'webp'],
+                'bmp' => method_exists($image, 'toBitmap') ? [(string) $image->toBitmap(), 'bmp'] : [(string) $image->toPng(), 'png'],
+                'tiff', 'tif' => method_exists($image, 'toTiff') ? [(string) $image->toTiff(), 'tiff'] : [(string) $image->toJpeg($quality), 'jpeg'],
+                default => [(string) $image->toWebp($quality), 'webp'],
+            };
+        } catch (Throwable) {
+            // Driver fallback to WebP or PNG if specific encoder failed
+            try {
+                return [(string) $image->toWebp($quality), 'webp'];
+            } catch (Throwable) {
+                return [(string) $image->toPng(), 'png'];
+            }
+        }
+    }
+
+    /**
+     * Standard encode method (backward-compatible).
      */
     public function encode(ImageInterface $image, string $format, int $quality = 85): string
     {
-        $normalizedFormat = strtolower($format);
+        [$encoded] = $this->encodeSafe($image, $format, $quality);
+        return $encoded;
+    }
 
-        if ($normalizedFormat === 'jpg') {
-            $normalizedFormat = 'jpeg';
-        }
-
-        $encoded = match ($normalizedFormat) {
-            'webp' => $image->toWebp($quality),
-            'jpeg' => $image->toJpeg($quality),
-            'png' => $image->toPng(),
-            'gif' => $image->toGif(),
-            'avif' => function_exists('imageavif') ? $image->toAvif($quality) : $image->toWebp($quality),
-            'bmp' => method_exists($image, 'toBitmap') ? $image->toBitmap() : $image->toPng(),
-            default => $image->toWebp($quality),
+    /**
+     * Get the standardized MIME type for a given format extension.
+     */
+    public function getMimeForFormat(string $format): string
+    {
+        return match (strtolower($format)) {
+            'jpeg', 'jpg' => 'image/jpeg',
+            'webp' => 'image/webp',
+            'png' => 'image/png',
+            'gif' => 'image/gif',
+            'avif' => 'image/avif',
+            'bmp' => 'image/bmp',
+            'tiff', 'tif' => 'image/tiff',
+            default => 'image/' . strtolower($format),
         };
-
-        return (string) $encoded;
     }
 }

@@ -73,9 +73,16 @@ class ChunkManager implements ChunkHandlerInterface
             ?: $request->input('resumableTotalChunks')
             ?: 1);
 
+        $maxChunks = (int) config('smart-upload.temporary.max_chunks', 10000);
+        $maxChunkSize = (int) config('smart-upload.temporary.max_chunk_size', 52428800);
+
+        if ($file->getSize() > $maxChunkSize) {
+            throw new ChunkException("Individual chunk size exceeds allowed limit of " . round($maxChunkSize / 1048576, 1) . "MB.");
+        }
+
         // DoS limit guard
-        if ($this->totalChunks > 10000 || $this->totalChunks < 1) {
-            throw new ChunkException("Invalid total chunks count: {$this->totalChunks}");
+        if ($this->totalChunks > $maxChunks || $this->totalChunks < 1) {
+            throw new ChunkException("Invalid total chunks count: {$this->totalChunks} (Max allowed: {$maxChunks})");
         }
 
         $this->chunkIndex = (int) ($request->input('dzchunkindex')

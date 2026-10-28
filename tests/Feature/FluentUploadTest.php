@@ -192,23 +192,51 @@ class FluentUploadTest extends TestCase
 
     public function test_facade_does_not_leak_builder_state_across_calls(): void
     {
-        $path1 = $this->createFakeImage('first.jpg', 800, 600);
+        $processor = new \KaziOmar\SmartUpload\Processors\ImageProcessor();
+
+        $path1 = $this->createFakeImage('first.jpg', 600, 400);
         $file1 = new UploadedFile($path1, 'first.jpg', 'image/jpeg', null, true);
 
-        // Call 1: Sets fit dimensions and custom quality
-        Upload::file($file1)->fit(150, 150)->quality(50);
+        // Call 1: Sets fit dimensions (square 120x120)
+        $result1 = Upload::file($file1)->fit(120, 120)->save('test_state1');
+        $img1 = $processor->read(Storage::disk('public')->path($result1->path));
+        $this->assertEquals(120, $img1->width());
+        $this->assertEquals(120, $img1->height());
 
-        $path2 = $this->createFakeImage('second.jpg', 800, 600);
+        $path2 = $this->createFakeImage('second.jpg', 600, 400);
         $file2 = new UploadedFile($path2, 'second.jpg', 'image/jpeg', null, true);
 
-        // Call 2: Should have clean fresh state (not inheriting fit 150x150)
-        $result2 = Upload::file($file2)->save('avatars');
-
-        // Result2 should be scaled down according to default config, not cropped to 150x150
-        $this->assertTrue(Storage::disk('public')->exists($result2->path));
+        // Call 2: Fresh call without fit, should NOT inherit 120x120
+        $result2 = Upload::file($file2)->save('test_state2');
+        $img2 = $processor->read(Storage::disk('public')->path($result2->path));
+        $this->assertNotEquals(120, $img2->width());
+        $this->assertEquals(600, $img2->width());
+        $this->assertEquals(400, $img2->height());
 
         @unlink($path1);
         @unlink($path2);
+    }
+
+    public function test_promotes_temp_upload_by_raw_uuid_and_deletes_temp_file(): void
+    {
+        $realPath = $this->createFakeImage('uuid-test.jpg');
+        $file = new UploadedFile($realPath, 'uuid-test.jpg', 'image/jpeg', null, true);
+
+        // Step 1: Upload to temporary storage
+        $temp = Upload::temp($file);
+        $this->assertTrue(Storage::disk('local')->exists($temp->path));
+
+        // Extract just the UUID without directory or extension
+        $uuid = pathinfo($temp->path, PATHINFO_FILENAME);
+
+        // Step 2: Promote using ONLY the UUID
+        $final = Upload::fromTemp($uuid)->save('promoted');
+        $this->assertTrue(Storage::disk('public')->exists($final->path));
+
+        // Temporary file in local disk MUST be automatically cleaned up!
+        $this->assertFalse(Storage::disk('local')->exists($temp->path));
+
+        @unlink($realPath);
     }
 
     public function test_temporary_upload_sanitizes_files_and_blocks_malicious_scripts(): void

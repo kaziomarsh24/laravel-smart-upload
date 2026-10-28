@@ -26,6 +26,15 @@ class SecuritySanitizerTest extends TestCase
         $this->sanitizer->sanitize($file);
     }
 
+    public function test_rejects_phar_and_html_executable_extensions(): void
+    {
+        $this->expectException(SecurityException::class);
+        $this->expectExceptionMessage("Files with extension '.phar' are forbidden");
+
+        $file = UploadedFile::fake()->create('archive.phar', 100);
+        $this->sanitizer->sanitize($file);
+    }
+
     public function test_detects_path_traversal_in_filename(): void
     {
         $this->expectException(SecurityException::class);

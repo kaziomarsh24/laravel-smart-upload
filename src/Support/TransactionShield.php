@@ -70,10 +70,11 @@ class TransactionShield
     }
 
     /**
-     * Reset tracked files (useful for tests or teardown).
+     * Reset tracked files and listener state (useful for tests or teardown).
      */
     public static function reset(): void
     {
         static::$guardedFiles = [];
+        static::$listenerRegistered = false;
     }
 }

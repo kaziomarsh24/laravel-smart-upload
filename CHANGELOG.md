@@ -18,4 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Two-step temporary upload storage and promotion for mobile apps and SPAs.
 - Strict security engine verifying magic-bytes, stripping EXIF, and blocking malicious scripts.
 - Artisan command (`smart-upload:prune`) with automatic daily scheduling.
-- Complete automated test suite covering 34 test cases and 99 assertions (100% pass rate).
+- Complete automated test suite covering 42 test cases and 116 assertions (100% pass rate).
+
+### Security & Hardening Fixes
+- Added `protected static $cached = false;` to `Upload` facade to eliminate cross-request builder state leaks in Laravel Octane and Queue Workers.
+- Enforced strict `SecuritySanitizer` inspection on temporary file uploads (`Upload::temp()`).
+- Restricted `fromTemp()` to the temporary storage directory with UUID boundary isolation (`^[0-9a-fA-F-]{36}$`).
+- Added automatic post-promotion cleanup of temporary files (including when promoted by raw UUID) and remote `/tmp` buffers.
+- Synchronized `disallowed_extensions` blacklist in `config/smart-upload.php` to include `.phar`, `.php7`, `.php8`, `.pht`, `.phps`, `.htaccess`, `.html`, and `.htm`. (Note: Existing publishers of config should re-publish or merge these extensions).
+- Hardened SVG XSS inspection using generic `/\bon\w+\s*=/i` to catch all HTML event handlers.
+- Implemented `encodeSafe()` and `getMimeForFormat()` in `ImageProcessor` to eliminate extension/content mismatches.
+- Enhanced `TransactionShield::reset()` to disarm listener flags across repeated test suites.
+- Added chunk upload bounds guard and DoS protection (`max_chunks` and `max_chunk_size`).

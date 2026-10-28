@@ -65,10 +65,10 @@ class TempUploadManager
     }
 
     /**
-     * Resolve a temporary file path or UUID into an UploadedFile instance,
+     * Resolve a temporary file path or UUID into a TempUploadedFile instance,
      * strictly ensuring the target resides inside the designated temp directory.
      */
-    public function resolveTempFile(string $tempPathOrUuid, string $disk): UploadedFile
+    public function resolveTempFile(string $tempPathOrUuid, string $disk): TempUploadedFile
     {
         // Block path traversal or directory escaping
         if (str_contains($tempPathOrUuid, '..') || str_contains($tempPathOrUuid, "\0")) {
@@ -77,10 +77,10 @@ class TempUploadManager
 
         $storage = Storage::disk($disk);
         $tempDir = trim(config('smart-upload.temporary.directory', 'smart-upload/temp'), '/');
-        $path = $tempPathOrUuid;
+        $path = trim($tempPathOrUuid, '/');
 
         // Check if user provided only a UUID (with or without extension)
-        if (!str_starts_with(trim($path, '/'), $tempDir)) {
+        if (!str_starts_with($path, $tempDir . '/')) {
             $uuid = pathinfo($tempPathOrUuid, PATHINFO_FILENAME);
             if (preg_match('/^[0-9a-fA-F-]{36}$/', $uuid)) {
                 $matches = $storage->files($tempDir);
@@ -96,12 +96,12 @@ class TempUploadManager
                     throw new UploadException("Temporary file with UUID {$uuid} not found.");
                 }
             } else {
-                throw new SecurityException("Temporary upload path must reside inside [{$tempDir}] directory.");
+                throw new SecurityException("Temporary upload path must reside inside [{$tempDir}/] directory.");
             }
         }
 
-        // Verify path is within temp directory
-        if (!str_starts_with(trim($path, '/'), $tempDir)) {
+        // Verify path is strictly within the temp directory prefix
+        if (!str_starts_with($path, $tempDir . '/')) {
             throw new SecurityException("Access to path outside temporary directory is forbidden: {$path}");
         }
 
@@ -110,6 +110,7 @@ class TempUploadManager
         }
 
         $fullPath = null;
+        $localBuffer = null;
         try {
             $fullPath = $storage->path($path);
         } catch (Throwable) {
@@ -121,12 +122,21 @@ class TempUploadManager
             $tempLocal = tempnam(sys_get_temp_dir(), 'smart_temp_');
             file_put_contents($tempLocal, $storage->get($path));
             $fullPath = $tempLocal;
+            $localBuffer = $tempLocal;
         }
 
         $originalName = basename($path);
         $mime = mime_content_type($fullPath) ?: 'application/octet-stream';
 
-        return new UploadedFile($fullPath, $originalName, $mime, null, true);
+        return new TempUploadedFile(
+            path: $fullPath,
+            originalName: $originalName,
+            mimeType: $mime,
+            error: null,
+            test: true,
+            resolvedStoragePath: $path,
+            localBufferPath: $localBuffer
+        );
     }
 
     /**
