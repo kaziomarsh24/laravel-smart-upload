@@ -78,9 +78,9 @@ class SmartUploader implements UploaderInterface
 
         if ($uploaded === null) {
             $this->files = [];
-            $nonPlurals = ['address', 'status', 'pass', 'access', 'business', 'process'];
-            $isPlural = str_ends_with($fieldName, 's') && !in_array(strtolower($fieldName), $nonPlurals, true);
-            $this->isMultiple = $isPlural || str_ends_with($fieldName, '[]') || is_array($request->input($fieldName));
+            $commonPlurals = ['photos', 'images', 'files', 'attachments', 'documents', 'pictures', 'videos', 'items', 'uploads'];
+            $isExplicitMultiple = str_ends_with($fieldName, '[]') || in_array(strtolower($fieldName), $commonPlurals, true) || is_array($request->input($fieldName));
+            $this->isMultiple = $isExplicitMultiple;
             return $this;
         }
 
@@ -369,10 +369,21 @@ class SmartUploader implements UploaderInterface
         $targetDisk = $disk ?: $this->resolveDisk();
         $actualPath = $pathOrUrl;
 
+        // Path traversal / null-byte attack guard
+        if (str_contains($actualPath, '..') || str_contains($actualPath, "\0")) {
+            return false;
+        }
+
         if (Str::startsWith($pathOrUrl, ['http://', 'https://'])) {
             $urlHost = parse_url($pathOrUrl, PHP_URL_HOST);
-            $diskUrl = Storage::disk($targetDisk)->url('');
-            $diskHost = parse_url($diskUrl, PHP_URL_HOST);
+
+            try {
+                $diskUrl = Storage::disk($targetDisk)->url('');
+                $diskHost = parse_url($diskUrl, PHP_URL_HOST);
+            } catch (\Throwable) {
+                $diskHost = null;
+            }
+
             $appHost = parse_url(config('app.url', ''), PHP_URL_HOST);
 
             // Never delete local files if the URL points to an external/foreign domain
@@ -387,9 +398,17 @@ class SmartUploader implements UploaderInterface
 
         $actualPath = ltrim($actualPath, '/');
         $actualPath = (string) preg_replace('#^storage/#', '', $actualPath);
-        $storage = Storage::disk($targetDisk);
 
-        return $storage->exists($actualPath) ? $storage->delete($actualPath) : false;
+        if (str_contains($actualPath, '..') || str_contains($actualPath, "\0") || trim($actualPath) === '') {
+            return false;
+        }
+
+        try {
+            $storage = Storage::disk($targetDisk);
+            return $storage->exists($actualPath) ? $storage->delete($actualPath) : false;
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     protected function resolveDisk(): string

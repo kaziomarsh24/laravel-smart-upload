@@ -235,4 +235,46 @@ class ModelPurgeTraitTest extends TestCase
         $this->assertTrue(Storage::disk('public')->exists('reviews/obj_keep.webp'));
         $this->assertTrue(Storage::disk('public')->exists('reviews/obj_new.webp'));
     }
+
+    public function test_safe_purge_ignores_arbitrary_associative_array_data_without_path_keys(): void
+    {
+        Storage::disk('public')->put('Logo', 'do-not-delete-root-file');
+        Storage::disk('public')->put('banner', 'do-not-delete-root-file-2');
+
+        // Review with metadata that has arbitrary associative keys without 'path' or 'file'
+        $review = TestReview::create([
+            'comment' => 'Review with non-file metadata',
+            'photos' => [
+                'label' => 'Logo',
+                'category' => 'banner',
+            ],
+        ]);
+
+        $review->delete();
+
+        // Root files must NOT be accidentally deleted!
+        $this->assertTrue(Storage::disk('public')->exists('Logo'));
+        $this->assertTrue(Storage::disk('public')->exists('banner'));
+    }
+
+    public function test_safe_purge_respects_purge_allowed_directories_config(): void
+    {
+        config()->set('smart-upload.purge_allowed_directories', ['avatars', 'uploads']);
+
+        Storage::disk('public')->put('avatars/pic.webp', 'allowed');
+        Storage::disk('public')->put('system/important.env', 'forbidden-dir');
+
+        $user = TestUser::create([
+            'name' => 'Restricted Purge',
+            'avatar' => 'avatars/pic.webp',
+            'cover' => 'system/important.env',
+        ]);
+
+        $user->delete();
+
+        // avatars/pic.webp was in allowed directory -> deleted
+        $this->assertFalse(Storage::disk('public')->exists('avatars/pic.webp'));
+        // system/important.env was outside allowed directory -> preserved
+        $this->assertTrue(Storage::disk('public')->exists('system/important.env'));
+    }
 }

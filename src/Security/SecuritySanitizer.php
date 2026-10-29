@@ -32,6 +32,12 @@ class SecuritySanitizer
         } else {
             $this->disallowedExtensions = array_values(array_unique(array_merge($baseline, $this->disallowedExtensions)));
         }
+
+        // Allow deliberate whitelist override if configured (e.g. developer portals allowing .py/.sh)
+        $explicitlyAllowed = config('smart-upload.allowed_extensions', []);
+        if (!empty($explicitlyAllowed) && is_array($explicitlyAllowed)) {
+            $this->disallowedExtensions = array_values(array_diff($this->disallowedExtensions, $explicitlyAllowed));
+        }
     }
 
     /**

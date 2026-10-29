@@ -5,6 +5,20 @@ All notable changes to `thekaziomar/laravel-smart-upload` will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-10-29
+
+### Security Hardening
+- **Anti-Path Traversal & Null-Byte Defense on File Purges:** Explicitly guarded `Upload::delete()` and `HasUploadPurge::safePurge()` against path traversal sequences (`..`, `../`, `..\`) and null-byte injections (`\0`), preventing malicious path manipulation and Flysystem crashes.
+- **Exception-Safe Filesystem Wrappers:** Guarded `Storage::disk()->url('')` and `Storage::disk()->delete()` calls inside defensive `try...catch (\Throwable)` blocks, ensuring cloud storage timeouts, unconfigured endpoints, or Flysystem errors gracefully return `false` without terminating `afterCommit` database callbacks.
+- **Resilient Associative Array Purge Filtering:** `HasUploadPurge` now safely distinguishes associative dictionaries (e.g. `['label' => 'Logo']`) from sequential file lists, only extracting recognized file path keys (`path`, `url`, `file`) to prevent arbitrary metadata from triggering accidental root file deletions.
+- **Configurable Purge Directory Whitelist (`purge_allowed_directories`):** Introduced optional configuration to strictly constrain model file deletions to designated directories (e.g. `['avatars', 'photos']`).
+- **Allowed Extension Whitelist Overrides:** Added `config('smart-upload.allowed_extensions')` support in `SecuritySanitizer`, allowing applications (like developer portals) to permit specific extensions (`.py`, `.sh`) while keeping the rest of the hardcoded security baseline intact.
+
+### Bug Fixes & Documentation
+- **Explicit Plural Heuristics (`Upload::request`):** Replaced naive 's'-suffix checking with known plural array terms (`photos`, `images`, `files`, etc.) and array brackets (`[]`), avoiding false-positive array conversions on singular terms like `address`, `status`, or `process`.
+- **Security Guidance & Markdown Fixes:** Documented security best practices for `$purgeableFiles` against mass-assignment manipulation, added storage visibility notes, and repaired orphan code fences in `README.md`.
+- Automated test suite expanded to **58 tests and 180 assertions (100% pass rate)**.
+
 ## [1.0.2] - 2026-10-29
 
 ### Security Hardening

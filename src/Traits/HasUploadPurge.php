@@ -47,7 +47,7 @@ trait HasUploadPurge
                             $currPaths = $extractPaths($current);
 
                             if (!empty($origPaths) || !empty($currPaths)) {
-                                $removed = array_diff($origPaths, $currPaths);
+                                $removed = array_values(array_diff($origPaths, $currPaths));
                                 static::safePurge($removed);
                             } else {
                                 $currJson = array_map(fn ($i) => is_array($i) ? json_encode($i) : (string) $i, $current);
@@ -58,7 +58,7 @@ trait HasUploadPurge
                                         $removed[] = $origItem;
                                     }
                                 }
-                                static::safePurge($removed);
+                                static::safePurge(array_values($removed));
                             }
                         } else {
                             static::safePurge($original);
@@ -105,12 +105,18 @@ trait HasUploadPurge
         }
 
         if (is_array($pathOrPaths)) {
-            // Handle single associative array DTO format (e.g. ['path' => 'avatars/x.webp'])
-            if (isset($pathOrPaths['path']) && is_string($pathOrPaths['path'])) {
-                static::safePurge($pathOrPaths['path']);
+            // If it is an associative dictionary (has string keys), only extract recognized file path keys
+            $isAssoc = count(array_filter(array_keys($pathOrPaths), 'is_string')) > 0;
+
+            if ($isAssoc) {
+                $candidate = $pathOrPaths['path'] ?? $pathOrPaths['url'] ?? $pathOrPaths['file'] ?? null;
+                if (is_string($candidate)) {
+                    static::safePurge($candidate);
+                }
                 return;
             }
 
+            // List of items (e.g. ['reviews/1.webp', 'reviews/2.webp'] or list of objects)
             foreach ($pathOrPaths as $path) {
                 static::safePurge($path);
             }
@@ -122,6 +128,27 @@ trait HasUploadPurge
         }
 
         $path = trim($pathOrPaths);
+
+        // Prevent path traversal or null-byte attacks
+        if (str_contains($path, '..') || str_contains($path, "\0")) {
+            return;
+        }
+
+        // Optional directory restriction: only purge within whitelisted directories if configured
+        $allowedDirs = config('smart-upload.purge_allowed_directories', []);
+        if (!empty($allowedDirs) && is_array($allowedDirs)) {
+            $isAllowed = false;
+            foreach ($allowedDirs as $allowedDir) {
+                $trimmedDir = trim((string) $allowedDir, '/');
+                if ($trimmedDir !== '' && (str_starts_with($path, $trimmedDir . '/') || $path === $trimmedDir)) {
+                    $isAllowed = true;
+                    break;
+                }
+            }
+            if (!$isAllowed) {
+                return;
+            }
+        }
 
         if (DB::transactionLevel() > 0) {
             DB::afterCommit(fn () => Upload::delete($path));

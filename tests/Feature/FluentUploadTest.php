@@ -388,4 +388,12 @@ class FluentUploadTest extends TestCase
         $fallback = 'https://example.com/fallback.png';
         $this->assertEquals($fallback, Upload::url($unsafeData, fallback: $fallback));
     }
+
+    public function test_delete_blocks_path_traversal_attempts(): void
+    {
+        // Path traversal attempts must return false without throwing 500 exceptions
+        $this->assertFalse(Upload::delete('../../etc/passwd'));
+        $this->assertFalse(Upload::delete('avatars/../secrets.env'));
+        $this->assertFalse(Upload::delete("avatars/pic.jpg\0"));
+    }
 }

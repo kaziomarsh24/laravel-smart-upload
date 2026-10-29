@@ -358,6 +358,10 @@ Upload::file($file)->disk('s3')->save('private-docs');
 Upload::file($file)->disk('r2')->save('cdn-assets');
 ```
 
+> [!NOTE]
+> **Private Local vs Public Storage:**
+> If your filesystem disk is `local` (`FILESYSTEM_DISK=local`), files are stored in `storage/app/` (private) and `Storage::url()` is not publicly accessible via web browsers. For publicly accessible assets, use `'disk' => 'public'` or cloud drivers (`s3`, `r2`).
+
 ### 1.10 Universal Media URL Formatter (`Upload::url()` & `upload_url()`)
 Effortlessly convert any stored database path, plain filename, or external link into a fully qualified URL across Local and Cloud (S3, R2, Spaces) storage without hardcoding `asset('storage/...')`:
 
@@ -600,6 +604,10 @@ class Review extends Model
 > [!NOTE]
 > **Is `$casts = ['photos' => 'array']` mandatory for multiple files?**
 > While declaring `$casts` is standard Laravel best practice, **it is NOT strictly mandatory** for Smart Upload. Our purge engine is defensive: even if you forget `$casts` and your database column returns a raw JSON string (e.g. `'["a.webp","b.webp"]'`), `HasUploadPurge` automatically detects, parses, and cleans up the files without crashing.
+
+> [!IMPORTANT]
+> **Security Best Practice for Purgeable Columns:**
+> Never populate attributes mapped in `$purgeableFiles` directly from unvalidated raw user inputs (e.g. `$user->update($request->all())`). An attacker could supply another user's file path to trigger unauthorized deletion of that file. Always set purgeable attributes using the verified result of `Upload::file()`, `Upload::request()`, or strictly validate ownership before updating.
 
 ### 6.2 Auto-Purge on Model Update
 When an attribute listed in `$purgeableFiles` is modified:

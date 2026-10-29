@@ -83,6 +83,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Security: Explicitly Allowed Extensions (Whitelist Override)
+    |--------------------------------------------------------------------------
+    | Useful for developer portals or specific projects where scripts (.py, .sh)
+    | are intentionally permitted. Takes precedence over disallowed_extensions.
+    */
+    'allowed_extensions' => [],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Security: Purge Allowed Directories
+    |--------------------------------------------------------------------------
+    | Restricts automatic model file purging to specific relative directories
+    | (e.g. ['avatars', 'photos', 'uploads']). Leave empty to allow all storage paths.
+    */
+    'purge_allowed_directories' => [],
+
+    /*
+    |--------------------------------------------------------------------------
     | Named Presets
     |--------------------------------------------------------------------------
     | Common image processing presets you can invoke via ->preset('name').

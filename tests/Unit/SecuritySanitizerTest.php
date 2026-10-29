@@ -59,6 +59,19 @@ class SecuritySanitizerTest extends TestCase
         $this->sanitizer->sanitize($file);
     }
 
+    public function test_allows_explicitly_configured_whitelisted_extensions(): void
+    {
+        // Explicitly allow .py in config (e.g. for developer portal)
+        config()->set('smart-upload.allowed_extensions', ['py']);
+
+        $sanitizer = new SecuritySanitizer();
+        $file = UploadedFile::fake()->create('script.py', 10, 'text/x-python');
+
+        // Should not throw SecurityException for extension
+        $sanitizer->sanitize($file);
+        $this->assertTrue(true);
+    }
+
     public function test_detects_malicious_svg_script_tags(): void
     {
         $this->expectException(SecurityException::class);
