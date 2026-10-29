@@ -42,10 +42,11 @@ if ($chunk->isComplete()) {
   - [1.2 Smart Image Sizing (`scaleDown` vs `fit`)](#12-smart-image-sizing-scaledown-vs-fit)
   - [1.3 Order-Independent Fluent Chaining](#13-order-independent-fluent-chaining)
   - [1.4 Batch Uploads (`Upload::files`) & `UploadCollection`](#14-batch-uploads-uploadfiles--uploadcollection)
-  - [1.5 Raw Non-Image File Handling](#15-raw-non-image-file-handling)
-  - [1.6 Old File Replacement (`->replace()`)](#16-old-file-replacement--replace)
-  - [1.7 Named Presets (`->preset()`)](#17-named-presets--preset)
-  - [1.8 Multi-Disk Routing (Local, S3, R2, Spaces)](#18-multi-disk-routing-local-s3-r2-spaces)
+  - [1.5 Zero-Boilerplate Request Uploads (`Upload::request`)](#15-zero-boilerplate-request-uploads-uploadrequest)
+  - [1.6 Raw Non-Image File Handling](#16-raw-non-image-file-handling)
+  - [1.7 Old File Replacement (`->replace()`)](#17-old-file-replacement--replace)
+  - [1.8 Named Presets (`->preset()`)](#18-named-presets--preset)
+  - [1.9 Multi-Disk Routing (Local, S3, R2, Spaces)](#19-multi-disk-routing-local-s3-r2-spaces)
 - [Layer 2: Strict Security & Defense-in-Depth Shield](#layer-2-strict-security--defense-in-depth-shield)
   - [2.1 Real MIME Magic-Bytes Inspection](#21-real-mime-magic-bytes-inspection)
   - [2.2 Anti-Path Traversal & Null-Byte Protection](#22-anti-path-traversal--null-byte-protection)
@@ -130,13 +131,15 @@ use KaziOmar\SmartUpload\Facades\Upload;
 
 public function store(Request $request)
 {
-    // Auto WebP, downscaled, safely named, stored in public/avatars
-    $result = Upload::file($request->file('avatar'))->preset('avatar')->save('avatars');
+    // 1. Single file from request: Auto WebP, downscaled, safely named
+    $avatar = Upload::request($request, 'avatar')->preset('avatar')->save('avatars');
+
+    // 2. Or batch files with zero-boilerplate:
+    $photos = Upload::request($request, 'photos')->toWebp()->save('reviews')->paths();
 
     return response()->json([
-        'url'  => $result->url,
-        'path' => $result->path,
-        'size' => $result->sizeFormatted(), // e.g. "245 KB"
+        'avatar_url' => $avatar->url,
+        'photos'     => $photos, // Array of paths or [] if none provided
     ]);
 }
 ```
