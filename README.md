@@ -372,14 +372,6 @@ Upload::delete('contracts/doc.pdf', disk: 's3');
 $result->delete();     // Deletes this specific file
 $collection->delete(); // Batch deletes all uploaded files
 ```
-// https://example.com/storage/stores/logos/logo.png
-
-// 4. Default placeholder fallback if path is null or empty
-$url = Upload::url($user->avatar, fallback: asset('images/default-avatar.png'));
-
-// 5. Short and sweet global helper in Blade templates or API Resources:
-$url = upload_url($product->image, defaultDir: 'products');
-```
 
 ---
 
