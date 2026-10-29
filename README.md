@@ -208,6 +208,18 @@ echo $result->sizeFormatted; // "142 KB"
 echo $result->mimeType;      // "image/webp"
 ```
 
+#### Retaining Original File Formats (`->keepOriginalFormat()`)
+By default, Smart Upload converts images to WebP for maximum compression and performance. If you need to keep the exact original format (e.g. animated GIFs, lossless PNG brand logos, or legacy app compatibility), simply chain `->keepOriginalFormat()`:
+
+```php
+$result = Upload::file($request->file('logo'))
+    ->keepOriginalFormat()
+    ->scaleDown(800)
+    ->save('logos');
+
+// Saved as logos/brand-logo_x8f9c1b2.png (preserves original format while still applying sizing & security!)
+```
+
 ### 1.2 Smart Image Sizing (`scaleDown` vs `fit`)
 Avoid stretched, distorted, or blurry images by selecting the exact intent:
 
