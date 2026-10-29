@@ -5,6 +5,19 @@ All notable changes to `thekaziomar/laravel-smart-upload` will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-10-29
+
+### Added
+- **Zero-Boilerplate Request Input Helper:** Introduced `Upload::request($request, 'fieldName')` to automatically detect, validate, and upload single or multiple files directly from incoming HTTP requests without controller boilerplate.
+- **Predictable Return Types by Intent:** `Upload::files(...)` now strictly guarantees returning `UploadCollection` regardless of file count (even for 1 file), eliminating undefined method issues when calling `->paths()`.
+- **Polymorphic DTO Safety Nets:**
+  - `UploadResult` now implements `paths(): array` and `urls(): array` (returning 1-element arrays for defensive caller compatibility).
+  - `UploadCollection` now implements magic `__get()` and helper methods `path(): ?string` and `url(): ?string` (returning first item's path/url for seamless interoperability).
+- **Array & JSON Column Auto-Purging (`HasUploadPurge`):**
+  - Extended `safePurge()` to support `string|array|null` and raw JSON column values (e.g. `$casts = ['photos' => 'array']`).
+  - Added smart array diffing on model updates: when removing photos from an array column, only the discarded files are purged from storage while remaining photos are preserved.
+- Extended automated test suite to 50 test cases and 158 assertions (100% pass rate).
+
 ## [1.0.0] - 2026-10-29
 
 ### Added

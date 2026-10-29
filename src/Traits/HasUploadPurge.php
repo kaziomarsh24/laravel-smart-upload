@@ -27,8 +27,15 @@ trait HasUploadPurge
             foreach ($purgeable as $attribute) {
                 if ($model->wasChanged($attribute)) {
                     $original = $model->getOriginal($attribute);
-                    if ($original && $original !== $model->getAttribute($attribute)) {
-                        static::safePurge($original);
+                    $current = $model->getAttribute($attribute);
+
+                    if ($original && $original !== $current) {
+                        if (is_array($original) && is_array($current)) {
+                            $removed = array_diff($original, $current);
+                            static::safePurge($removed);
+                        } else {
+                            static::safePurge($original);
+                        }
                     }
                 }
             }
@@ -52,14 +59,39 @@ trait HasUploadPurge
     }
 
     /**
-     * Safely delete a file, deferring until DB::afterCommit if inside a transaction.
+     * Safely delete a file or collection of files, deferring until DB::afterCommit if inside a transaction.
+     *
+     * @param string|array<string>|null $pathOrPaths
      */
-    protected static function safePurge(string $path): void
+    protected static function safePurge(string|array|null $pathOrPaths): void
     {
+        if (empty($pathOrPaths)) {
+            return;
+        }
+
+        // Handle raw JSON strings stored in database
+        if (is_string($pathOrPaths) && (str_starts_with($pathOrPaths, '[') || str_starts_with($pathOrPaths, '{'))) {
+            $decoded = json_decode($pathOrPaths, true);
+            if (is_array($decoded)) {
+                $pathOrPaths = $decoded;
+            }
+        }
+
+        if (is_array($pathOrPaths)) {
+            foreach ($pathOrPaths as $path) {
+                static::safePurge($path);
+            }
+            return;
+        }
+
+        if (!is_string($pathOrPaths) || trim($pathOrPaths) === '') {
+            return;
+        }
+
+        $path = trim($pathOrPaths);
+
         if (DB::transactionLevel() > 0) {
-            DB::afterCommit(function () use ($path) {
-                Upload::delete($path);
-            });
+            DB::afterCommit(fn () => Upload::delete($path));
         } else {
             Upload::delete($path);
         }

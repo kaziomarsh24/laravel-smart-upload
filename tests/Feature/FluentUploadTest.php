@@ -288,4 +288,72 @@ class FluentUploadTest extends TestCase
         // 8. Global helper function upload_url()
         $this->assertEquals($url1, upload_url('avatars/pic.jpg'));
     }
+
+    public function test_files_method_always_returns_upload_collection_even_for_single_file(): void
+    {
+        $path = $this->createFakeImage('single_in_batch.jpg');
+        $file = new UploadedFile($path, 'single_in_batch.jpg', 'image/jpeg', null, true);
+
+        // Upload a single file using the plural files() method
+        $collection = Upload::files([$file])->save('batch');
+
+        $this->assertInstanceOf(UploadCollection::class, $collection);
+        $this->assertCount(1, $collection);
+        $this->assertIsArray($collection->paths());
+        $this->assertCount(1, $collection->paths());
+        $this->assertEquals($collection->first()->path, $collection->path);
+        $this->assertEquals($collection->first()->url, $collection->url);
+
+        @unlink($path);
+    }
+
+    public function test_polymorphic_dto_properties_and_methods_prevent_crashes(): void
+    {
+        $path = $this->createFakeImage('test_poly.jpg');
+        $file = new UploadedFile($path, 'test_poly.jpg', 'image/jpeg', null, true);
+
+        $result = Upload::file($file)->save('single');
+
+        // UploadResult should safely support paths() and urls() returning array
+        $this->assertInstanceOf(UploadResult::class, $result);
+        $this->assertIsArray($result->paths());
+        $this->assertEquals([$result->path], $result->paths());
+        $this->assertIsArray($result->urls());
+        $this->assertEquals([$result->url], $result->urls());
+
+        @unlink($path);
+    }
+
+    public function test_upload_request_helper_handles_single_multiple_and_empty_requests(): void
+    {
+        // 1. Single file request
+        $path1 = $this->createFakeImage('req1.jpg');
+        $file1 = new UploadedFile($path1, 'req1.jpg', 'image/jpeg', null, true);
+        $request1 = \Illuminate\Http\Request::create('/upload', 'POST', [], [], ['photo' => $file1]);
+
+        $res1 = Upload::request($request1, 'photo')->save('request_single');
+        $this->assertInstanceOf(UploadResult::class, $res1);
+        $this->assertStringContainsString('request_single', $res1->path);
+        @unlink($path1);
+
+        // 2. Multiple files request
+        $path2 = $this->createFakeImage('req2.jpg');
+        $path3 = $this->createFakeImage('req3.jpg');
+        $file2 = new UploadedFile($path2, 'req2.jpg', 'image/jpeg', null, true);
+        $file3 = new UploadedFile($path3, 'req3.jpg', 'image/jpeg', null, true);
+        $request2 = \Illuminate\Http\Request::create('/upload', 'POST', [], [], ['photos' => [$file2, $file3]]);
+
+        $res2 = Upload::request($request2, 'photos')->save('request_batch');
+        $this->assertInstanceOf(UploadCollection::class, $res2);
+        $this->assertCount(2, $res2->paths());
+        @unlink($path2);
+        @unlink($path3);
+
+        // 3. Empty request (user selected no files) -> returns empty collection with empty paths array!
+        $emptyRequest = \Illuminate\Http\Request::create('/upload', 'POST', [], [], []);
+        $res3 = Upload::request($emptyRequest, 'photos')->save('request_empty');
+        $this->assertInstanceOf(UploadCollection::class, $res3);
+        $this->assertEmpty($res3->paths());
+        $this->assertEquals([], $res3->paths());
+    }
 }

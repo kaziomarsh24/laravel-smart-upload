@@ -29,6 +29,18 @@ class SoftDeletedTestUser extends Model
     protected array $purgeableFiles = ['avatar'];
 }
 
+class TestReview extends Model
+{
+    use HasUploadPurge;
+
+    protected $table = 'test_reviews';
+    protected $guarded = [];
+    protected $casts = [
+        'photos' => 'array',
+    ];
+    protected array $purgeableFiles = ['photos'];
+}
+
 class ModelPurgeTraitTest extends TestCase
 {
     protected function setUp(): void
@@ -48,6 +60,13 @@ class ModelPurgeTraitTest extends TestCase
             $table->string('name')->nullable();
             $table->string('avatar')->nullable();
             $table->softDeletes();
+            $table->timestamps();
+        });
+
+        Schema::create('test_reviews', function (Blueprint $table) {
+            $table->id();
+            $table->text('comment')->nullable();
+            $table->json('photos')->nullable();
             $table->timestamps();
         });
     }
@@ -138,5 +157,53 @@ class ModelPurgeTraitTest extends TestCase
 
         // Because transaction rolled back, old file MUST STILL EXIST on disk (No data loss!)
         $this->assertTrue(Storage::disk('public')->exists('avatars/safe-orig.jpg'));
+    }
+
+    public function test_purges_array_and_json_files_when_model_is_deleted(): void
+    {
+        Storage::disk('public')->put('reviews/p1.webp', 'photo1');
+        Storage::disk('public')->put('reviews/p2.webp', 'photo2');
+        Storage::disk('public')->put('reviews/p3.webp', 'photo3');
+
+        $review = TestReview::create([
+            'comment' => 'Great product!',
+            'photos' => ['reviews/p1.webp', 'reviews/p2.webp', 'reviews/p3.webp'],
+        ]);
+
+        $this->assertTrue(Storage::disk('public')->exists('reviews/p1.webp'));
+        $this->assertTrue(Storage::disk('public')->exists('reviews/p2.webp'));
+        $this->assertTrue(Storage::disk('public')->exists('reviews/p3.webp'));
+
+        // Delete model with JSON array column
+        $review->delete();
+
+        // All array elements should be automatically purged
+        $this->assertFalse(Storage::disk('public')->exists('reviews/p1.webp'));
+        $this->assertFalse(Storage::disk('public')->exists('reviews/p2.webp'));
+        $this->assertFalse(Storage::disk('public')->exists('reviews/p3.webp'));
+    }
+
+    public function test_purges_only_removed_files_when_array_column_is_partially_updated(): void
+    {
+        Storage::disk('public')->put('reviews/pic_keep.webp', 'keep');
+        Storage::disk('public')->put('reviews/pic_remove.webp', 'remove');
+        Storage::disk('public')->put('reviews/pic_new.webp', 'new');
+
+        $review = TestReview::create([
+            'comment' => 'Initial review',
+            'photos' => ['reviews/pic_keep.webp', 'reviews/pic_remove.webp'],
+        ]);
+
+        // User edits review: keeps 'pic_keep.webp', deletes 'pic_remove.webp', adds 'pic_new.webp'
+        $review->update([
+            'photos' => ['reviews/pic_keep.webp', 'reviews/pic_new.webp'],
+        ]);
+
+        // pic_remove.webp MUST be purged!
+        $this->assertFalse(Storage::disk('public')->exists('reviews/pic_remove.webp'));
+
+        // pic_keep.webp and pic_new.webp MUST still exist!
+        $this->assertTrue(Storage::disk('public')->exists('reviews/pic_keep.webp'));
+        $this->assertTrue(Storage::disk('public')->exists('reviews/pic_new.webp'));
     }
 }

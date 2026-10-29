@@ -26,6 +26,7 @@ class SmartUploader implements UploaderInterface
 {
     /** @var array<UploadedFile> */
     protected array $files = [];
+    protected bool $isMultiple = false;
     protected ?string $disk = null;
     protected ?bool $convertToWebp = null;
     protected ?int $quality = null;
@@ -46,6 +47,8 @@ class SmartUploader implements UploaderInterface
 
     public function file(UploadedFile|string $file): static
     {
+        $this->isMultiple = false;
+
         if (is_string($file)) {
             $file = new UploadedFile($file, basename($file), null, null, true);
         }
@@ -54,11 +57,40 @@ class SmartUploader implements UploaderInterface
         return $this;
     }
 
-    public function files(array $files): static
+    public function files(UploadedFile|array|string $files): static
     {
-        $this->files = array_map(function ($file) {
+        $this->isMultiple = true;
+        $list = is_array($files) ? $files : [$files];
+
+        $this->files = array_values(array_map(function ($file) {
             return is_string($file) ? new UploadedFile($file, basename($file), null, null, true) : $file;
-        }, $files);
+        }, $list));
+
+        return $this;
+    }
+
+    /**
+     * Automatically capture uploaded file(s) from an incoming HTTP Request.
+     */
+    public function request(Request $request, string $fieldName): static
+    {
+        $uploaded = $request->file($fieldName);
+
+        if ($uploaded === null) {
+            $this->files = [];
+            // Predict multiple if input is an array or field name ends with 's' (e.g. 'photos')
+            $this->isMultiple = is_array($request->input($fieldName)) || str_ends_with($fieldName, 's');
+            return $this;
+        }
+
+        if (is_array($uploaded)) {
+            $this->isMultiple = true;
+            $valid = array_filter($uploaded, fn ($f) => $f instanceof UploadedFile && $f->isValid());
+            $this->files = array_values($valid);
+        } else {
+            $this->isMultiple = false;
+            $this->files = ($uploaded instanceof UploadedFile && $uploaded->isValid()) ? [$uploaded] : [];
+        }
 
         return $this;
     }
@@ -145,7 +177,11 @@ class SmartUploader implements UploaderInterface
     public function save(string $directory = ''): UploadResult|UploadCollection
     {
         if (empty($this->files)) {
-            throw new UploadException('No file specified to upload. Call ->file() or ->files() first.');
+            if ($this->isMultiple) {
+                return new UploadCollection([]);
+            }
+
+            throw new UploadException('No file specified to upload. Call ->file(), ->files(), or ->request() first.');
         }
 
         $results = array_map(fn (UploadedFile $file) => $this->processAndSave($file, $directory), $this->files);
@@ -174,7 +210,7 @@ class SmartUploader implements UploaderInterface
             }
         }
 
-        return count($results) === 1 ? $results[0] : new UploadCollection($results);
+        return $this->isMultiple ? new UploadCollection($results) : $results[0];
     }
 
     protected function processAndSave(UploadedFile $file, string $directory): UploadResult

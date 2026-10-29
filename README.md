@@ -226,7 +226,7 @@ Upload::file($file)->disk('s3')->toWebp(85)->fit(200, 200)->save('avatars');
 ```
 
 ### 1.4 Batch Uploads (`Upload::files`) & `UploadCollection`
-Upload an array of files in a single line:
+Upload an array of files in a single line. The `files()` method strictly guarantees returning an `UploadCollection` regardless of file count (even if only 1 file is uploaded):
 
 ```php
 $collection = Upload::files($request->file('photos'))
@@ -242,7 +242,30 @@ $urls  = $collection->urls();  // ['https://...', 'https://...']
 $collection->delete();
 ```
 
-### 1.5 Raw Non-Image File Handling
+> [!TIP]
+> **Polymorphic DX Safety:** To prevent crashes when expecting arrays or single paths, `UploadResult` also implements `->paths()` and `->urls()` (returning 1-element arrays), while `UploadCollection` supports `->path` and `->url` (returning the first item). Your code never breaks!
+
+### 1.5 Zero-Boilerplate Request Uploads (`Upload::request`)
+Eliminate controller `if-else` and `hasFile()` boilerplate. Automatically detects single or multiple files, validates integrity, and gracefully returns empty results if the user submitted no files:
+
+```php
+public function store(Request $request)
+{
+    // Upload whatever is in 'photos' (single, array, or empty) in 1 line:
+    $photos = Upload::request($request, 'photos')
+        ->scaleDown(1200)
+        ->toWebp(85)
+        ->save('reviews')
+        ->paths();
+
+    Review::create([
+        'comment' => $request->comment,
+        'photos'  => $photos, // Safely saves array of paths, or [] if empty!
+    ]);
+}
+```
+
+### 1.6 Raw Non-Image File Handling
 Non-image files (PDFs, ZIPs, DOCX, CSVs) bypass image processing and stream directly to disk:
 
 ```php
@@ -483,7 +506,7 @@ public function store(Request $request)
 ## Layer 6: Eloquent Model Lifecycle Integration (`HasUploadPurge`)
 
 ### 6.1 Declarative Attribute Purging (`$purgeableFiles`)
-Add the `HasUploadPurge` trait to any Eloquent model and declare the file columns:
+Add the `HasUploadPurge` trait to any Eloquent model and declare the file columns. Supports single string columns as well as **JSON / Array columns** (e.g. `$casts = ['photos' => 'array']`):
 
 ```php
 namespace App\Models;
@@ -491,13 +514,21 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use KaziOmar\SmartUpload\Traits\HasUploadPurge;
 
-class User extends Model
+class Review extends Model
 {
     use HasUploadPurge;
 
-    protected array $purgeableFiles = ['avatar', 'cover_image'];
+    protected $casts = [
+        'photos' => 'array',
+    ];
+
+    // Handles both string columns and array/json columns automatically:
+    protected array $purgeableFiles = ['photos'];
 }
 ```
+
+> [!TIP]
+> **Smart Array Diffing:** When updating an array/JSON column, `HasUploadPurge` automatically computes the difference. If a review has 3 photos and you remove 1, only the removed photo is purged from storage while the remaining photos are preserved!
 
 ### 6.2 Auto-Purge on Model Update
 When an attribute listed in `$purgeableFiles` is modified:

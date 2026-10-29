@@ -17,7 +17,8 @@ use KaziOmar\SmartUpload\Support\TempUploadManager;
  * Facade entrypoint for KaziOmar\SmartUpload.
  *
  * @method static SmartUploader file(UploadedFile|string $file)
- * @method static SmartUploader files(array $files)
+ * @method static SmartUploader files(UploadedFile|array|string $files)
+ * @method static SmartUploader request(Request $request, string $fieldName)
  * @method static SmartUploader disk(string $disk)
  * @method static SmartUploader preset(string $name)
  * @method static string|null url(?string $pathOrUrl, ?string $defaultDir = null, ?string $disk = null, ?string $fallback = null)

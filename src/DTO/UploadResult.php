@@ -58,6 +58,26 @@ class UploadResult implements Arrayable, Jsonable, JsonSerializable
     }
 
     /**
+     * Get the path as an array for polymorphic batch compatibility.
+     *
+     * @return array<string>
+     */
+    public function paths(): array
+    {
+        return [$this->path];
+    }
+
+    /**
+     * Get the URL as an array for polymorphic batch compatibility.
+     *
+     * @return array<string>
+     */
+    public function urls(): array
+    {
+        return [$this->url];
+    }
+
+    /**
      * Convert the DTO to an array.
      *
      * @return array<string, mixed>

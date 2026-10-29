@@ -19,11 +19,16 @@ interface UploaderInterface
     public function file(UploadedFile|string $file): static;
 
     /**
-     * Set multiple files to upload in batch.
+     * Set multiple files or a single file to upload in batch.
      *
-     * @param array<UploadedFile|string> $files
+     * @param UploadedFile|array<UploadedFile|string>|string $files
      */
-    public function files(array $files): static;
+    public function files(UploadedFile|array|string $files): static;
+
+    /**
+     * Automatically capture and validate uploaded files from an incoming HTTP Request.
+     */
+    public function request(\Illuminate\Http\Request $request, string $fieldName): static;
 
     /**
      * Specify the target filesystem disk.

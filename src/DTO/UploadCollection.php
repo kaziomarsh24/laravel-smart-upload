@@ -34,10 +34,38 @@ class UploadCollection extends Collection
     }
 
     /**
+     * Get the first file's path (convenience shortcut).
+     */
+    public function path(): ?string
+    {
+        return $this->first()?->path;
+    }
+
+    /**
+     * Get the first file's URL (convenience shortcut).
+     */
+    public function url(): ?string
+    {
+        return $this->first()?->url;
+    }
+
+    /**
      * Delete all uploaded files in this collection from disk.
      */
     public function delete(): void
     {
         $this->each(fn (UploadResult $result) => $result->delete());
+    }
+
+    /**
+     * Magic property getter for seamless compatibility with single-result callers.
+     */
+    public function __get($key)
+    {
+        return match ($key) {
+            'path' => $this->path(),
+            'url' => $this->url(),
+            default => parent::__get($key),
+        };
     }
 }
