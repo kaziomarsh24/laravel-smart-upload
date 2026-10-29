@@ -47,6 +47,8 @@ if ($chunk->isComplete()) {
   - [1.7 Old File Replacement (`->replace()`)](#17-old-file-replacement--replace)
   - [1.8 Named Presets (`->preset()`)](#18-named-presets--preset)
   - [1.9 Multi-Disk Routing (Local, S3, R2, Spaces)](#19-multi-disk-routing-local-s3-r2-spaces)
+  - [1.10 Universal Media URL Formatter (`Upload::url()`)](#110-universal-media-url-formatter-uploadurl--upload_url)
+  - [1.11 Manual File Deletion (`Upload::delete()`)](#111-manual-file-deletion-uploaddelete)
 - [Layer 2: Strict Security & Defense-in-Depth Shield](#layer-2-strict-security--defense-in-depth-shield)
   - [2.1 Real MIME Magic-Bytes Inspection](#21-real-mime-magic-bytes-inspection)
   - [2.2 Anti-Path Traversal & Null-Byte Protection](#22-anti-path-traversal--null-byte-protection)
@@ -72,6 +74,7 @@ if ($chunk->isComplete()) {
   - [6.2 Auto-Purge on Model Update](#62-auto-purge-on-model-update)
   - [6.3 Auto-Purge on Model Deletion](#63-auto-purge-on-model-deletion)
   - [6.4 SoftDeletes Compatibility](#64-softdeletes-compatibility)
+  - [6.5 Trait Limitations & Query Builder Caveats](#65-trait-limitations--query-builder-caveats)
 - [Layer 7: Automated Garbage Collection & Maintenance](#layer-7-automated-garbage-collection--maintenance)
   - [7.1 The Artisan Prune Command](#71-the-artisan-prune-command)
   - [7.2 Automatic Daily Scheduler Integration](#72-automatic-daily-scheduler-integration)
@@ -324,7 +327,7 @@ Upload::file($file)->disk('s3')->save('private-docs');
 Upload::file($file)->disk('r2')->save('cdn-assets');
 ```
 
-### 1.9 Universal Media URL Formatter (`Upload::url()` & `upload_url()`)
+### 1.10 Universal Media URL Formatter (`Upload::url()` & `upload_url()`)
 Effortlessly convert any stored database path, plain filename, or external link into a fully qualified URL across Local and Cloud (S3, R2, Spaces) storage without hardcoding `asset('storage/...')`:
 
 ```php
@@ -341,6 +344,34 @@ $url = Upload::url('https://lh3.googleusercontent.com/avatar.jpg');
 
 // 3. Auto-prefix default directory when path is just a plain filename
 $url = Upload::url('logo.png', defaultDir: 'stores/logos');
+// https://example.com/storage/stores/logos/logo.png
+
+// 4. Fallback placeholder for null/empty database columns
+$url = Upload::url($user->avatar, fallback: 'https://placehold.co/150x150.png');
+
+// 5. Global helper function anywhere in Blade views or resources:
+echo upload_url($user->avatar);
+```
+
+### 1.11 Manual File Deletion (`Upload::delete()`)
+When you want to explicitly delete a file from disk without relying on model events:
+
+```php
+use KaziOmar\SmartUpload\Facades\Upload;
+
+// 1. Delete by relative path:
+Upload::delete('avatars/old_pic.webp');
+
+// 2. Delete by full public URL (automatically parses path):
+Upload::delete('https://yourdomain.com/storage/avatars/old_pic.webp');
+
+// 3. Delete from custom storage disk (e.g. S3):
+Upload::delete('contracts/doc.pdf', disk: 's3');
+
+// 4. Directly from an UploadResult or UploadCollection DTO:
+$result->delete();     // Deletes this specific file
+$collection->delete(); // Batch deletes all uploaded files
+```
 // https://example.com/storage/stores/logos/logo.png
 
 // 4. Default placeholder fallback if path is null or empty
@@ -565,6 +596,26 @@ $user->delete();
 If your model uses Laravel's `SoftDeletes` trait:
 * Standard `$model->delete()` **retains** the files on storage so restored models retain their images.
 * Calling `$model->forceDelete()` **permanently purges** the files from storage.
+
+### 6.5 Trait Limitations & Query Builder Caveats
+Like all Eloquent model traits in Laravel, `HasUploadPurge` listens to model lifecycle events (`updated`, `deleted`, `forceDeleted`).
+
+> [!WARNING]
+> **When does the trait NOT automatically trigger?**
+> 1. **Direct DB queries & Mass-deletes via Query Builder:**
+>    ```php
+>    // ⚠️ Laravel DOES NOT fire Eloquent model events on direct SQL queries:
+>    DB::table('users')->where('id', 1)->delete();
+>    User::where('status', 'inactive')->delete();
+>    ```
+>    *Solution:* If mass-deleting models with files, loop the models so lifecycle hooks trigger:
+>    ```php
+>    User::where('status', 'inactive')->get()->each->delete();
+>    ```
+> 2. **Quiet operations (`deleteQuietly()` / `updateQuietly()`):**
+>    Using Laravel's `deleteQuietly()` intentionally suppresses all model events, skipping the auto-purge.
+> 3. **Fallback:**
+>    If you ever update or delete files outside Eloquent events, use **`Upload::delete($path)`** or **`->replace($oldPath)`** manually.
 
 ---
 
