@@ -5,21 +5,21 @@ All notable changes to `thekaziomar/laravel-smart-upload` will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (Pre-release v1.0.0)
+## [1.0.0] - 2026-10-29
 
 ### Added
 - Fluent, order-independent builder syntax (`Upload::file()->toWebp()->save()`).
 - Built-in Intervention Image v3 driver with auto Imagick/GD detection.
 - Aspect ratio downscaling (`scaleDown()`) and exact center cropping (`fit()`).
 - Resumable chunk upload engine with low-memory file streams (`Upload::chunk()`).
-- Automatic Database Transaction Rollback protection (Ghost file shield).
+- Automatic Database Transaction Rollback protection (`TransactionShield`) with multi-connection and multi-tenant support.
 - Eloquent model auto-cleanup trait (`HasUploadPurge`).
 - SoftDeletes compatibility for model file auto-purging (only purging on `forceDelete`).
 - Two-step temporary upload storage and promotion for mobile apps and SPAs.
 - Strict security engine verifying magic-bytes, stripping EXIF, and blocking malicious scripts.
 - Artisan command (`smart-upload:prune`) with automatic daily scheduling.
 - Universal media URL formatting via `Upload::url()` and `upload_url()` helper (auto-resolving relative paths across Local, S3, R2, preserving external links, auto-prefixing directories, and fallback placeholders).
-- Complete automated test suite covering 43 test cases and 126 assertions (100% pass rate).
+- Complete automated test suite covering 45 test cases and 131 assertions (100% pass rate).
 
 ### Security & Hardening Fixes
 - Added `protected static $cached = false;` to `Upload` facade to eliminate cross-request builder state leaks in Laravel Octane and Queue Workers.
