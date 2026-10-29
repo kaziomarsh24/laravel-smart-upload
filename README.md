@@ -5,7 +5,7 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/thekaziomar/laravel-smart-upload.svg?style=flat-square)](https://packagist.org/packages/thekaziomar/laravel-smart-upload)
 [![PHP Version](https://img.shields.io/badge/PHP-8.2%20to%208.5+-777BB4.svg?style=flat-square)](https://php.net)
 [![Laravel Version](https://img.shields.io/badge/Laravel-11%20%7C%2012%20%7C%2013-ff2d20.svg?style=flat-square)](https://laravel.com)
-[![License](https://img.shields.io/packagist/l/thekaziomar/laravel-smart-upload.svg?style=flat-square)](LICENSE.md)
+[![License](https://img.shields.io/github/license/kaziomarsh24/laravel-smart-upload.svg?style=flat-square)](LICENSE.md)
 
 > ### Developer-First, Zero-Database File & Chunk Upload Engine for Laravel
 > Eliminates heavy database migrations and media tables, brings fluent order-independent method chaining, auto-converts images to WebP with responsive downscaling (`scaleDown`) and center-cropping (`fit`), prevents orphaned "ghost files" on S3 during database rollbacks (`DB::transaction`), streams large video chunks with zero memory bloat, and auto-purges old files upon Eloquent model updates.
