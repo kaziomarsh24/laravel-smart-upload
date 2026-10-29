@@ -253,4 +253,39 @@ class FluentUploadTest extends TestCase
 
         Upload::fromTemp('../../../etc/passwd');
     }
+
+    public function test_url_formatter_handles_all_path_varieties_and_external_links(): void
+    {
+        // 1. Standard storage relative path
+        $url1 = Upload::url('avatars/pic.jpg');
+        $this->assertEquals(Storage::disk('public')->url('avatars/pic.jpg'), $url1);
+
+        // 2. External HTTP/HTTPS links preserved untouched
+        $external = 'https://images.unsplash.com/photo-12345?auto=format';
+        $this->assertEquals($external, Upload::url($external));
+
+        // 3. Default directory prefixing when only a filename is passed
+        $url3 = Upload::url('logo.png', defaultDir: 'stores/logos');
+        $this->assertEquals(Storage::disk('public')->url('stores/logos/logo.png'), $url3);
+
+        // 4. Strips redundant storage/ prefix
+        $url4 = Upload::url('storage/banners/hero.webp');
+        $this->assertEquals(Storage::disk('public')->url('banners/hero.webp'), $url4);
+
+        // 5. Fallback URL on null or empty string
+        $fallback = 'https://example.com/default-avatar.png';
+        $this->assertEquals($fallback, Upload::url(null, fallback: $fallback));
+        $this->assertEquals($fallback, Upload::url('', fallback: $fallback));
+        $this->assertNull(Upload::url(null));
+
+        // 6. Custom disk routing (e.g. S3)
+        $urlS3 = Upload::url('private/contract.pdf', disk: 's3');
+        $this->assertEquals(Storage::disk('s3')->url('private/contract.pdf'), $urlS3);
+
+        // 7. Path traversal blocking (returns fallback)
+        $this->assertEquals($fallback, Upload::url('../../etc/passwd', fallback: $fallback));
+
+        // 8. Global helper function upload_url()
+        $this->assertEquals($url1, upload_url('avatars/pic.jpg'));
+    }
 }

@@ -288,6 +288,32 @@ Upload::file($file)->disk('s3')->save('private-docs');
 Upload::file($file)->disk('r2')->save('cdn-assets');
 ```
 
+### 1.9 Universal Media URL Formatter (`Upload::url()` & `upload_url()`)
+Effortlessly convert any stored database path, plain filename, or external link into a fully qualified URL across Local and Cloud (S3, R2, Spaces) storage without hardcoding `asset('storage/...')`:
+
+```php
+use KaziOmar\SmartUpload\Facades\Upload;
+
+// 1. Storage relative path (works on Local, S3, Cloudflare R2 automatically)
+$url = Upload::url($user->avatar);
+// Local: https://example.com/storage/avatars/pic.webp
+// S3:    https://bucket.s3.amazonaws.com/avatars/pic.webp
+
+// 2. External links preserved untouched (CDN, Google OAuth, Unsplash)
+$url = Upload::url('https://lh3.googleusercontent.com/avatar.jpg');
+// https://lh3.googleusercontent.com/avatar.jpg
+
+// 3. Auto-prefix default directory when path is just a plain filename
+$url = Upload::url('logo.png', defaultDir: 'stores/logos');
+// https://example.com/storage/stores/logos/logo.png
+
+// 4. Default placeholder fallback if path is null or empty
+$url = Upload::url($user->avatar, fallback: asset('images/default-avatar.png'));
+
+// 5. Short and sweet global helper in Blade templates or API Resources:
+$url = upload_url($product->image, defaultDir: 'products');
+```
+
 ---
 
 ## Layer 2: Strict Security & Defense-in-Depth Shield

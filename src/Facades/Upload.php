@@ -20,6 +20,7 @@ use KaziOmar\SmartUpload\Support\TempUploadManager;
  * @method static SmartUploader files(array $files)
  * @method static SmartUploader disk(string $disk)
  * @method static SmartUploader preset(string $name)
+ * @method static string|null url(?string $pathOrUrl, ?string $defaultDir = null, ?string $disk = null, ?string $fallback = null)
  * @method static bool delete(?string $pathOrUrl, ?string $disk = null)
  *
  * @see \KaziOmar\SmartUpload\SmartUploader
@@ -73,5 +74,15 @@ class Upload extends Facade
         $uploader->markPromotedFromTemp($tempPathOrUuid, $targetDisk);
 
         return $uploader;
+    }
+
+    /**
+     * Format any stored path, plain filename, or external link into a fully qualified URL.
+     */
+    public static function url(?string $pathOrUrl, ?string $defaultDir = null, ?string $disk = null, ?string $fallback = null): ?string
+    {
+        /** @var SmartUploader $uploader */
+        $uploader = app('smart-upload');
+        return $uploader->url($pathOrUrl, $defaultDir, $disk, $fallback);
     }
 }

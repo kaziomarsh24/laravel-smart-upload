@@ -18,7 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Two-step temporary upload storage and promotion for mobile apps and SPAs.
 - Strict security engine verifying magic-bytes, stripping EXIF, and blocking malicious scripts.
 - Artisan command (`smart-upload:prune`) with automatic daily scheduling.
-- Complete automated test suite covering 42 test cases and 116 assertions (100% pass rate).
+- Universal media URL formatting via `Upload::url()` and `upload_url()` helper (auto-resolving relative paths across Local, S3, R2, preserving external links, auto-prefixing directories, and fallback placeholders).
+- Complete automated test suite covering 43 test cases and 126 assertions (100% pass rate).
 
 ### Security & Hardening Fixes
 - Added `protected static $cached = false;` to `Upload` facade to eliminate cross-request builder state leaks in Laravel Octane and Queue Workers.

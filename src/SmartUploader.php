@@ -252,6 +252,49 @@ class SmartUploader implements UploaderInterface
         return $this->deleteFile($pathOrUrl, $disk);
     }
 
+    /**
+     * Format any stored path, plain filename, or external link into a fully qualified URL.
+     */
+    public function url(
+        ?string $pathOrUrl,
+        ?string $defaultDir = null,
+        ?string $disk = null,
+        ?string $fallback = null
+    ): ?string {
+        if ($pathOrUrl === null) {
+            return $fallback;
+        }
+
+        $trimmed = trim($pathOrUrl);
+        if ($trimmed === '') {
+            return $fallback;
+        }
+
+        // Return external URLs, protocol-relative links, or data URIs as-is
+        if (Str::startsWith($trimmed, ['http://', 'https://', '//', 'data:'])) {
+            return $trimmed;
+        }
+
+        $cleanPath = ltrim($trimmed, '/');
+
+        // Prevent directory traversal or null-byte payload injection
+        if (str_contains($cleanPath, '..') || str_contains($cleanPath, "\0")) {
+            return $fallback;
+        }
+
+        // Strip leading storage/ prefix if passed (e.g. storage/avatars/x.webp)
+        $cleanPath = (string) preg_replace('#^storage/#', '', $cleanPath);
+
+        // Prepend default directory if the path is just a plain filename
+        if ($defaultDir !== null && !str_contains($cleanPath, '/')) {
+            $cleanPath = trim($defaultDir, '/') . '/' . $cleanPath;
+        }
+
+        $targetDisk = $disk ?: $this->resolveDisk();
+
+        return Storage::disk($targetDisk)->url($cleanPath);
+    }
+
     public function deleteFile(?string $pathOrUrl, ?string $disk = null): bool
     {
         if (!$pathOrUrl) {
