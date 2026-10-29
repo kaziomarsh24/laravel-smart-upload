@@ -14,6 +14,8 @@ use KaziOmar\SmartUpload\Exceptions\SecurityException;
  */
 class SecuritySanitizer
 {
+    protected array $allowedExtensions = [];
+
     /**
      * @param array<string> $disallowedExtensions
      */
@@ -26,6 +28,9 @@ class SecuritySanitizer
             'aspx', 'vbs', 'com', 'htaccess', 'html', 'htm'
         ];
 
+        // Critical executable extensions that can NEVER be bypassed or whitelisted
+        $unbypassable = ['php', 'php3', 'php4', 'php5', 'php7', 'php8', 'pht', 'phar', 'phps', 'phtml', 'htaccess'];
+
         if (empty($this->disallowedExtensions)) {
             $configured = config('smart-upload.disallowed_extensions', []);
             $this->disallowedExtensions = array_values(array_unique(array_merge($baseline, $configured)));
@@ -36,7 +41,10 @@ class SecuritySanitizer
         // Allow deliberate whitelist override if configured (e.g. developer portals allowing .py/.sh)
         $explicitlyAllowed = config('smart-upload.allowed_extensions', []);
         if (!empty($explicitlyAllowed) && is_array($explicitlyAllowed)) {
-            $this->disallowedExtensions = array_values(array_diff($this->disallowedExtensions, $explicitlyAllowed));
+            // Strip out unbypassable server-side script exploits
+            $safeAllowed = array_values(array_diff($explicitlyAllowed, $unbypassable));
+            $this->allowedExtensions = $safeAllowed;
+            $this->disallowedExtensions = array_values(array_diff($this->disallowedExtensions, $safeAllowed));
         }
     }
 
@@ -77,6 +85,11 @@ class SecuritySanitizer
             'application/x-sh',
             'text/x-shellscript',
         ];
+
+        // If shell scripts are explicitly permitted via allowed_extensions, relax shell script MIME blocking
+        if (in_array('sh', $this->allowedExtensions, true) || in_array('bash', $this->allowedExtensions, true)) {
+            $forbiddenMimes = array_values(array_diff($forbiddenMimes, ['application/x-sh', 'text/x-shellscript']));
+        }
 
         if (in_array($realMime, $forbiddenMimes, true)) {
             throw new SecurityException("Malicious file payload detected. True MIME type: {$realMime}");
@@ -153,6 +166,11 @@ class SecuritySanitizer
             'phtml', 'exe', 'sh', 'bat', 'cgi', 'pl', 'py', 'jar', 'jsp', 'asp',
             'aspx', 'vbs', 'htaccess'
         ];
+
+        // If specific safe extensions are whitelisted, remove them from double extension blocking
+        if (!empty($this->allowedExtensions)) {
+            $middleBlacklist = array_values(array_diff($middleBlacklist, $this->allowedExtensions));
+        }
 
         foreach ($parts as $part) {
             if (in_array($part, $middleBlacklist, true)) {

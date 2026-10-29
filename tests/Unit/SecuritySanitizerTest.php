@@ -61,8 +61,8 @@ class SecuritySanitizerTest extends TestCase
 
     public function test_allows_explicitly_configured_whitelisted_extensions(): void
     {
-        // Explicitly allow .py in config (e.g. for developer portal)
-        config()->set('smart-upload.allowed_extensions', ['py']);
+        // Explicitly allow .py and .sh in config (e.g. for developer portal)
+        config()->set('smart-upload.allowed_extensions', ['py', 'sh']);
 
         $sanitizer = new SecuritySanitizer();
         $file = UploadedFile::fake()->create('script.py', 10, 'text/x-python');
@@ -70,6 +70,32 @@ class SecuritySanitizerTest extends TestCase
         // Should not throw SecurityException for extension
         $sanitizer->sanitize($file);
         $this->assertTrue(true);
+
+        // Allows double extensions for permitted types (e.g. dataset.py.zip)
+        $archiveFile = UploadedFile::fake()->create('dataset.py.zip', 10, 'application/zip');
+        $sanitizer->sanitize($archiveFile);
+        $this->assertTrue(true);
+
+        // Allows shell script when 'sh' is whitelisted in allowed_extensions
+        $shPath = tempnam(sys_get_temp_dir(), 'sh_');
+        file_put_contents($shPath, "#!/bin/bash\necho 'hello world'");
+        $shFile = new UploadedFile($shPath, 'deploy.sh', 'application/x-sh', null, true);
+        $sanitizer->sanitize($shFile);
+        $this->assertTrue(true);
+        @unlink($shPath);
+    }
+
+    public function test_unbypassable_php_extensions_cannot_be_whitelisted(): void
+    {
+        $this->expectException(SecurityException::class);
+        $this->expectExceptionMessage("Files with extension '.php' are forbidden for security reasons.");
+
+        // Even if someone erroneously configures php in allowed_extensions, it must be rejected!
+        config()->set('smart-upload.allowed_extensions', ['php', 'phar']);
+
+        $sanitizer = new SecuritySanitizer();
+        $file = UploadedFile::fake()->create('malicious.php', 10, 'text/x-php');
+        $sanitizer->sanitize($file);
     }
 
     public function test_detects_malicious_svg_script_tags(): void

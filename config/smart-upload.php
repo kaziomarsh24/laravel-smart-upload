@@ -87,6 +87,9 @@ return [
     |--------------------------------------------------------------------------
     | Useful for developer portals or specific projects where scripts (.py, .sh)
     | are intentionally permitted. Takes precedence over disallowed_extensions.
+    |
+    | WARNING: Critical server-side executable extensions (php, phar, htaccess)
+    | are permanently forbidden by Smart Upload and cannot be bypassed.
     */
     'allowed_extensions' => [],
 
@@ -94,8 +97,10 @@ return [
     |--------------------------------------------------------------------------
     | Security: Purge Allowed Directories
     |--------------------------------------------------------------------------
-    | Restricts automatic model file purging to specific relative directories
-    | (e.g. ['avatars', 'photos', 'uploads']). Leave empty to allow all storage paths.
+    | Restricts automatic model file purging to specific directories
+    | (e.g. ['avatars', 'photos', 'uploads']). Values are automatically normalized
+    | (accepting relative paths, leading slashes '/avatars', or full URLs).
+    | Leave empty to allow all storage paths.
     */
     'purge_allowed_directories' => [],
 

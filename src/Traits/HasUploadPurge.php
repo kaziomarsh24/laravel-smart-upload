@@ -137,10 +137,18 @@ trait HasUploadPurge
         // Optional directory restriction: only purge within whitelisted directories if configured
         $allowedDirs = config('smart-upload.purge_allowed_directories', []);
         if (!empty($allowedDirs) && is_array($allowedDirs)) {
+            // Normalize path (stripping leading slashes, full URLs, and storage/ prefix)
+            $normalizedPath = $path;
+            if (str_starts_with($normalizedPath, 'http://') || str_starts_with($normalizedPath, 'https://')) {
+                $normalizedPath = (string) (parse_url($normalizedPath, PHP_URL_PATH) ?? $normalizedPath);
+            }
+            $normalizedPath = ltrim($normalizedPath, '/');
+            $normalizedPath = (string) preg_replace('#^storage/#', '', $normalizedPath);
+
             $isAllowed = false;
             foreach ($allowedDirs as $allowedDir) {
                 $trimmedDir = trim((string) $allowedDir, '/');
-                if ($trimmedDir !== '' && (str_starts_with($path, $trimmedDir . '/') || $path === $trimmedDir)) {
+                if ($trimmedDir !== '' && (str_starts_with($normalizedPath, $trimmedDir . '/') || $normalizedPath === $trimmedDir)) {
                     $isAllowed = true;
                     break;
                 }

@@ -277,4 +277,24 @@ class ModelPurgeTraitTest extends TestCase
         // system/important.env was outside allowed directory -> preserved
         $this->assertTrue(Storage::disk('public')->exists('system/important.env'));
     }
+
+    public function test_safe_purge_normalizes_leading_slash_and_full_url_with_allowed_directories(): void
+    {
+        config()->set('smart-upload.purge_allowed_directories', ['avatars']);
+
+        Storage::disk('public')->put('avatars/leading_slash.webp', 'data1');
+        Storage::disk('public')->put('avatars/from_url.webp', 'data2');
+
+        $user = TestUser::create([
+            'name' => 'Normalize Test',
+            'avatar' => '/avatars/leading_slash.webp',
+            'cover' => 'http://localhost/storage/avatars/from_url.webp',
+        ]);
+
+        $user->delete();
+
+        // Both should be correctly recognized as avatars/ and deleted
+        $this->assertFalse(Storage::disk('public')->exists('avatars/leading_slash.webp'));
+        $this->assertFalse(Storage::disk('public')->exists('avatars/from_url.webp'));
+    }
 }
