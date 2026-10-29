@@ -50,4 +50,54 @@ class TransactionRollbackTest extends TestCase
         $this->assertNotNull($uploadedPath);
         $this->assertTrue(Storage::disk('public')->exists($uploadedPath));
     }
+
+    public function test_purges_file_automatically_if_custom_connection_transaction_rolls_back(): void
+    {
+        // Setup a secondary/tenant connection pointing to an in-memory database
+        config()->set('database.connections.tenant', [
+            'driver' => 'sqlite',
+            'database' => ':memory:',
+            'prefix' => '',
+        ]);
+
+        $uploadedPath = null;
+
+        try {
+            DB::connection('tenant')->transaction(function () use (&$uploadedPath) {
+                $file = UploadedFile::fake()->create('tenant_policy.pdf', 100, 'application/pdf');
+                $result = Upload::file($file)->save('tenant_policies');
+
+                $uploadedPath = $result->path;
+                $this->assertTrue(Storage::disk('public')->exists($uploadedPath));
+
+                throw new Exception('Simulated tenant transaction rollback!');
+            });
+        } catch (Exception $e) {
+            // Expected
+        }
+
+        // Must be purged because tenant connection transaction rolled back
+        $this->assertNotNull($uploadedPath);
+        $this->assertFalse(Storage::disk('public')->exists($uploadedPath));
+    }
+
+    public function test_retains_file_when_custom_connection_transaction_commits(): void
+    {
+        config()->set('database.connections.tenant', [
+            'driver' => 'sqlite',
+            'database' => ':memory:',
+            'prefix' => '',
+        ]);
+
+        $uploadedPath = null;
+
+        DB::connection('tenant')->transaction(function () use (&$uploadedPath) {
+            $file = UploadedFile::fake()->create('tenant_lease.pdf', 100, 'application/pdf');
+            $result = Upload::file($file)->save('tenant_leases');
+            $uploadedPath = $result->path;
+        });
+
+        $this->assertNotNull($uploadedPath);
+        $this->assertTrue(Storage::disk('public')->exists($uploadedPath));
+    }
 }

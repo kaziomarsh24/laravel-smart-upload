@@ -15,9 +15,16 @@ abstract class TestCase extends OrchestraTestCase
     {
         parent::setUp();
 
+        \KaziOmar\SmartUpload\Support\TransactionShield::reset();
         Storage::fake('public');
         Storage::fake('local');
         Storage::fake('s3');
+    }
+
+    protected function tearDown(): void
+    {
+        \KaziOmar\SmartUpload\Support\TransactionShield::reset();
+        parent::tearDown();
     }
 
     protected function getPackageProviders($app): array
