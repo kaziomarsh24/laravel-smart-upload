@@ -600,9 +600,13 @@ Like all Eloquent model traits in Laravel, `HasUploadPurge` listens to model lif
 >    DB::table('users')->where('id', 1)->delete();
 >    User::where('status', 'inactive')->delete();
 >    ```
->    *Solution:* If mass-deleting models with files, loop the models so lifecycle hooks trigger:
+>    *Solution:* If mass-deleting models with files, iterate over the models so lifecycle hooks trigger:
 >    ```php
+>    // Standard dataset:
 >    User::where('status', 'inactive')->get()->each->delete();
+>
+>    // Large dataset (RAM-safe lazy streaming cursor):
+>    User::where('status', 'inactive')->cursor()->each->delete();
 >    ```
 > 2. **Quiet operations (`deleteQuietly()` / `updateQuietly()`):**
 >    Using Laravel's `deleteQuietly()` intentionally suppresses all model events, skipping the auto-purge.
