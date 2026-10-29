@@ -276,7 +276,7 @@ $result = Upload::file($request->file('document'))->save('contracts');
 // Uploads as contracts/my-document_x8f7d9a1.pdf
 ```
 
-### 1.6 Old File Replacement (`->replace()`)
+### 1.7 Old File Replacement (`->replace()`)
 Prevent storage disks from accumulating orphaned files when users update pictures:
 
 ```php
@@ -289,7 +289,17 @@ $result = Upload::file($request->file('avatar'))
 $user->update(['avatar' => $result->path]);
 ```
 
-### 1.7 Named Presets (`->preset()`)
+> [!NOTE]
+> **Do I need `->replace()` if I use the `HasUploadPurge` trait on my Model?**
+> **No!** If your Eloquent model uses `HasUploadPurge`, it handles old file deletion automatically upon `$user->update()`. 
+> 
+> You only need `->replace()` when:
+> * You aren't using the trait on the model.
+> * You are using direct query builder updates (`DB::table('users')->where(...)->update(...)`).
+> * You manage files outside models (e.g. application settings, configs).
+> * You prefer explicit manual replacement right in your controller.
+
+### 1.8 Named Presets (`->preset()`)
 Define reusable sizing and formatting configurations in `config/smart-upload.php`:
 
 ```php
@@ -306,7 +316,7 @@ Then invoke them cleanly anywhere in your application:
 Upload::file($file)->preset('avatar')->save('avatars');
 ```
 
-### 1.8 Multi-Disk Routing (Local, S3, R2, Spaces)
+### 1.9 Multi-Disk Routing (Local, S3, R2, Spaces)
 Seamlessly route files across multiple cloud storage drivers:
 
 ```php
@@ -532,6 +542,10 @@ class Review extends Model
 
 > [!TIP]
 > **Smart Array Diffing:** When updating an array/JSON column, `HasUploadPurge` automatically computes the difference. If a review has 3 photos and you remove 1, only the removed photo is purged from storage while the remaining photos are preserved!
+
+> [!NOTE]
+> **Is `$casts = ['photos' => 'array']` mandatory for multiple files?**
+> While declaring `$casts` is standard Laravel best practice, **it is NOT strictly mandatory** for Smart Upload. Our purge engine is defensive: even if you forget `$casts` and your database column returns a raw JSON string (e.g. `'["a.webp","b.webp"]'`), `HasUploadPurge` automatically detects, parses, and cleans up the files without crashing.
 
 ### 6.2 Auto-Purge on Model Update
 When an attribute listed in `$purgeableFiles` is modified:
