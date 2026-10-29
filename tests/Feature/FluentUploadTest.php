@@ -356,4 +356,36 @@ class FluentUploadTest extends TestCase
         $this->assertEmpty($res3->paths());
         $this->assertEquals([], $res3->paths());
     }
+
+    public function test_delete_blocks_deleting_local_files_from_foreign_external_urls(): void
+    {
+        // Setup local victim file
+        Storage::disk('public')->put('avatars/victim_user.webp', 'victim-content');
+        $this->assertTrue(Storage::disk('public')->exists('avatars/victim_user.webp'));
+
+        // Attempt to delete with an external foreign host URL that shares the same path
+        $foreignUrl = 'https://malicious-external-domain.com/storage/avatars/victim_user.webp';
+        $result = Upload::delete($foreignUrl);
+
+        // Must reject deletion and keep local victim file intact!
+        $this->assertFalse($result);
+        $this->assertTrue(Storage::disk('public')->exists('avatars/victim_user.webp'));
+
+        // Legitimate deletion using local URL must succeed
+        $localUrl = Storage::disk('public')->url('avatars/victim_user.webp');
+        $this->assertTrue(Upload::delete($localUrl));
+        $this->assertFalse(Storage::disk('public')->exists('avatars/victim_user.webp'));
+    }
+
+    public function test_url_formatter_restricts_unsafe_data_uris(): void
+    {
+        // Safe data:image/ is preserved
+        $safeData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+        $this->assertEquals($safeData, Upload::url($safeData));
+
+        // Unsafe data:text/html must be rejected (fallback returned)
+        $unsafeData = 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==';
+        $fallback = 'https://example.com/fallback.png';
+        $this->assertEquals($fallback, Upload::url($unsafeData, fallback: $fallback));
+    }
 }

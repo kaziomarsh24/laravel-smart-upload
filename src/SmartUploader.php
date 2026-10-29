@@ -78,18 +78,34 @@ class SmartUploader implements UploaderInterface
 
         if ($uploaded === null) {
             $this->files = [];
-            // Predict multiple if input is an array or field name ends with 's' (e.g. 'photos')
-            $this->isMultiple = is_array($request->input($fieldName)) || str_ends_with($fieldName, 's');
+            $nonPlurals = ['address', 'status', 'pass', 'access', 'business', 'process'];
+            $isPlural = str_ends_with($fieldName, 's') && !in_array(strtolower($fieldName), $nonPlurals, true);
+            $this->isMultiple = $isPlural || str_ends_with($fieldName, '[]') || is_array($request->input($fieldName));
             return $this;
         }
 
         if (is_array($uploaded)) {
             $this->isMultiple = true;
-            $valid = array_filter($uploaded, fn ($f) => $f instanceof UploadedFile && $f->isValid());
-            $this->files = array_values($valid);
+            $valid = [];
+            foreach ($uploaded as $f) {
+                if ($f instanceof UploadedFile) {
+                    if (!$f->isValid()) {
+                        throw new UploadException("Upload failed for item in '{$fieldName}': " . $f->getErrorMessage());
+                    }
+                    $valid[] = $f;
+                }
+            }
+            $this->files = $valid;
         } else {
             $this->isMultiple = false;
-            $this->files = ($uploaded instanceof UploadedFile && $uploaded->isValid()) ? [$uploaded] : [];
+            if ($uploaded instanceof UploadedFile) {
+                if (!$uploaded->isValid()) {
+                    throw new UploadException("Upload failed for field '{$fieldName}': " . $uploaded->getErrorMessage());
+                }
+                $this->files = [$uploaded];
+            } else {
+                $this->files = [];
+            }
         }
 
         return $this;
@@ -198,16 +214,24 @@ class SmartUploader implements UploaderInterface
             }
         }
 
-        // Clean up promoted temporary files and local buffers
-        foreach ($this->files as $file) {
-            if ($file instanceof TempUploadedFile) {
-                if ($this->promotedTempDisk !== null && !empty($file->resolvedStoragePath)) {
-                    Storage::disk($this->promotedTempDisk)->delete($file->resolvedStoragePath);
-                }
-                if (!empty($file->localBufferPath) && file_exists($file->localBufferPath)) {
-                    @unlink($file->localBufferPath);
+        // Clean up promoted temporary files and local buffers with transaction rollback safety
+        $cleanupTemp = function () {
+            foreach ($this->files as $file) {
+                if ($file instanceof TempUploadedFile) {
+                    if ($this->promotedTempDisk !== null && !empty($file->resolvedStoragePath)) {
+                        Storage::disk($this->promotedTempDisk)->delete($file->resolvedStoragePath);
+                    }
+                    if (!empty($file->localBufferPath) && file_exists($file->localBufferPath)) {
+                        @unlink($file->localBufferPath);
+                    }
                 }
             }
+        };
+
+        if (DB::transactionLevel() > 0) {
+            DB::afterCommit($cleanupTemp);
+        } else {
+            $cleanupTemp();
         }
 
         return $this->isMultiple ? new UploadCollection($results) : $results[0];
@@ -306,8 +330,13 @@ class SmartUploader implements UploaderInterface
             return $fallback;
         }
 
-        // Return external URLs, protocol-relative links, or data URIs as-is
-        if (Str::startsWith($trimmed, ['http://', 'https://', '//', 'data:'])) {
+        // Reject unsafe data URIs (only allow data:image/)
+        if (Str::startsWith($trimmed, 'data:')) {
+            return Str::startsWith($trimmed, 'data:image/') ? $trimmed : $fallback;
+        }
+
+        // Return external URLs or protocol-relative links as-is
+        if (Str::startsWith($trimmed, ['http://', 'https://', '//'])) {
             return $trimmed;
         }
 
@@ -341,12 +370,23 @@ class SmartUploader implements UploaderInterface
         $actualPath = $pathOrUrl;
 
         if (Str::startsWith($pathOrUrl, ['http://', 'https://'])) {
+            $urlHost = parse_url($pathOrUrl, PHP_URL_HOST);
+            $diskUrl = Storage::disk($targetDisk)->url('');
+            $diskHost = parse_url($diskUrl, PHP_URL_HOST);
+            $appHost = parse_url(config('app.url', ''), PHP_URL_HOST);
+
+            // Never delete local files if the URL points to an external/foreign domain
+            if ($urlHost && $urlHost !== $diskHost && $urlHost !== $appHost) {
+                return false;
+            }
+
             $parsed = parse_url($pathOrUrl, PHP_URL_PATH);
             $decoded = urldecode($parsed ?: '');
-            $actualPath = preg_replace('#^/?storage/#', '', $decoded);
+            $actualPath = (string) preg_replace('#^/?storage/#', '', $decoded);
         }
 
         $actualPath = ltrim($actualPath, '/');
+        $actualPath = (string) preg_replace('#^storage/#', '', $actualPath);
         $storage = Storage::disk($targetDisk);
 
         return $storage->exists($actualPath) ? $storage->delete($actualPath) : false;

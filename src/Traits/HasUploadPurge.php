@@ -31,8 +31,35 @@ trait HasUploadPurge
 
                     if ($original && $original !== $current) {
                         if (is_array($original) && is_array($current)) {
-                            $removed = array_diff($original, $current);
-                            static::safePurge($removed);
+                            $extractPaths = function (array $items): array {
+                                $paths = [];
+                                foreach ($items as $item) {
+                                    if (is_string($item)) {
+                                        $paths[] = $item;
+                                    } elseif (is_array($item) && isset($item['path']) && is_string($item['path'])) {
+                                        $paths[] = $item['path'];
+                                    }
+                                }
+                                return $paths;
+                            };
+
+                            $origPaths = $extractPaths($original);
+                            $currPaths = $extractPaths($current);
+
+                            if (!empty($origPaths) || !empty($currPaths)) {
+                                $removed = array_diff($origPaths, $currPaths);
+                                static::safePurge($removed);
+                            } else {
+                                $currJson = array_map(fn ($i) => is_array($i) ? json_encode($i) : (string) $i, $current);
+                                $removed = [];
+                                foreach ($original as $origItem) {
+                                    $json = is_array($origItem) ? json_encode($origItem) : (string) $origItem;
+                                    if (!in_array($json, $currJson, true)) {
+                                        $removed[] = $origItem;
+                                    }
+                                }
+                                static::safePurge($removed);
+                            }
                         } else {
                             static::safePurge($original);
                         }
@@ -78,6 +105,12 @@ trait HasUploadPurge
         }
 
         if (is_array($pathOrPaths)) {
+            // Handle single associative array DTO format (e.g. ['path' => 'avatars/x.webp'])
+            if (isset($pathOrPaths['path']) && is_string($pathOrPaths['path'])) {
+                static::safePurge($pathOrPaths['path']);
+                return;
+            }
+
             foreach ($pathOrPaths as $path) {
                 static::safePurge($path);
             }

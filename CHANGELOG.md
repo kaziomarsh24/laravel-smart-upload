@@ -5,6 +5,21 @@ All notable changes to `thekaziomar/laravel-smart-upload` will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-10-29
+
+### Security Hardening
+- **Host Verification on Deletions (`Upload::delete`):** Enforced strict host checking on HTTP/HTTPS URLs against the active storage disk and `app.url`, preventing attackers from triggering arbitrary local file deletions using foreign external URLs.
+- **Hardcoded Baseline Config Union:** `SecuritySanitizer` now unconditionally unions its hardcoded baseline blacklist with `config('smart-upload.disallowed_extensions')`, guaranteeing full protection against `.phar`, `.php7`, `.php8`, and script extensions even when projects run older published configurations.
+- **Unsafe Data URI Restriction:** `Upload::url()` now restricts data URIs strictly to `data:image/`, preventing injection of unsafe payloads (e.g. `data:text/html`).
+
+### Bug Fixes & Improvements
+- **Nested Array Model Purge Safety:** Fixed PHP `Array to string conversion` warnings in `HasUploadPurge` when updating columns containing nested associative arrays or object-like structures (e.g. `[['path' => '...', 'url' => '...']]`).
+- **Strict Multi-Connection Transaction Isolation:** `TransactionShield` now tracks connection names individually for each guarded file. A rollback on a secondary connection (e.g. `tenant`) only purges files belonging to that connection, without prematurely deleting files guarded under the default or active parent connection.
+- **Deferred Temp Promotion Cleanup:** Promoted temporary file cleanup (`fromTemp()->save()`) is now safely deferred to `DB::afterCommit()`, preventing temporary file loss if a database transaction rolls back.
+- **Upload Request Error Transparency:** `Upload::request()` now throws descriptive `UploadException` instances containing the native upload error message (e.g. exceeding `upload_max_filesize`) instead of generic failures.
+- **Documentation Overhaul:** Added Master Method Cheat Sheet & Decision Guide, cursor lazy-streaming mass deletion guide, and fixed orphan markdown fence formatting.
+- Test suite expanded to **54 tests and 172 assertions (100% pass rate)**.
+
 ## [1.0.1] - 2026-10-29
 
 ### Added

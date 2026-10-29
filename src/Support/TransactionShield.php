@@ -15,14 +15,14 @@ use Illuminate\Support\Facades\Storage;
  */
 class TransactionShield
 {
-    /** @var array<string, array{disk: string, path: string}> */
+    /** @var array<string, array{disk: string, path: string, connections: array<string>}> */
     protected static array $guardedFiles = [];
     protected static bool $listenerRegistered = false;
 
     /**
      * Protect a newly written file by registering an auto-delete cleanup
      * if the currently active database transaction rolls back.
-     * Supports multiple database connections (e.g. multi-tenant / custom connections).
+     * Supports multiple database connections with strict connection isolation.
      */
     public static function guard(string $disk, string $path): void
     {
@@ -38,14 +38,33 @@ class TransactionShield
         }
 
         $key = "{$disk}:{$path}";
-        static::$guardedFiles[$key] = ['disk' => $disk, 'path' => $path];
+        $connectionNames = [];
 
-        // Disarm file cleanup when active connection transaction successfully commits
         foreach ($activeConnections as $connection) {
-            $connection->afterCommit(function () use ($key) {
-                unset(static::$guardedFiles[$key]);
+            $connName = $connection->getName();
+            $connectionNames[] = $connName;
+
+            // Disarm file cleanup when this specific connection successfully commits
+            $connection->afterCommit(function () use ($key, $connName) {
+                if (isset(static::$guardedFiles[$key])) {
+                    static::$guardedFiles[$key]['connections'] = array_values(array_diff(
+                        static::$guardedFiles[$key]['connections'],
+                        [$connName]
+                    ));
+
+                    // Only fully disarm when all associated connections have committed
+                    if (empty(static::$guardedFiles[$key]['connections'])) {
+                        unset(static::$guardedFiles[$key]);
+                    }
+                }
             });
         }
+
+        static::$guardedFiles[$key] = [
+            'disk' => $disk,
+            'path' => $path,
+            'connections' => $connectionNames,
+        ];
 
         static::ensureListenerRegistered();
     }
@@ -86,22 +105,27 @@ class TransactionShield
         static::$listenerRegistered = true;
 
         Event::listen(TransactionRolledBack::class, function ($event = null) {
-            // Check if the rolled-back connection reached root level 0
+            $connName = null;
             $level = 0;
+
             if (is_object($event) && isset($event->connection)) {
                 $level = $event->connection->transactionLevel();
+                $connName = $event->connection->getName();
             } else {
                 $level = DB::transactionLevel();
+                $connName = DB::getDefaultConnection();
             }
 
-            // When root transaction rolls back to level 0, purge all pending files
+            // Only purge guarded files associated with this specific connection when it reaches root level 0
             if ($level === 0 && !empty(static::$guardedFiles)) {
                 foreach (static::$guardedFiles as $key => $file) {
-                    if (Storage::disk($file['disk'])->exists($file['path'])) {
-                        Storage::disk($file['disk'])->delete($file['path']);
+                    if ($connName === null || in_array($connName, $file['connections'], true)) {
+                        if (Storage::disk($file['disk'])->exists($file['path'])) {
+                            Storage::disk($file['disk'])->delete($file['path']);
+                        }
+                        unset(static::$guardedFiles[$key]);
                     }
                 }
-                static::$guardedFiles = [];
             }
         });
     }

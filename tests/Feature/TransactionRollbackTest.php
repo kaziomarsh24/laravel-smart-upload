@@ -100,4 +100,47 @@ class TransactionRollbackTest extends TestCase
         $this->assertNotNull($uploadedPath);
         $this->assertTrue(Storage::disk('public')->exists($uploadedPath));
     }
+
+    public function test_isolates_guarded_files_between_different_database_connections(): void
+    {
+        config()->set('database.connections.tenant', [
+            'driver' => 'sqlite',
+            'database' => ':memory:',
+            'prefix' => '',
+        ]);
+
+        $defaultPath = null;
+        $tenantPath = null;
+
+        DB::transaction(function () use (&$defaultPath, &$tenantPath) {
+            // 1. Upload file inside default connection transaction
+            $file1 = UploadedFile::fake()->create('default_doc.pdf', 100, 'application/pdf');
+            $res1 = Upload::file($file1)->save('default_docs');
+            $defaultPath = $res1->path;
+
+            // 2. Secondary connection transaction that fails and rolls back
+            try {
+                DB::connection('tenant')->transaction(function () use (&$tenantPath) {
+                    $file2 = UploadedFile::fake()->create('tenant_failed.pdf', 100, 'application/pdf');
+                    $res2 = Upload::file($file2)->save('tenant_docs');
+                    $tenantPath = $res2->path;
+
+                    throw new Exception('Tenant transaction failure!');
+                });
+            } catch (Exception $e) {
+                // Caught tenant failure
+            }
+
+            // At this point:
+            // Tenant transaction rolled back -> tenant file MUST be purged!
+            $this->assertFalse(Storage::disk('public')->exists($tenantPath));
+
+            // Default connection is STILL active -> default file MUST NOT be purged!
+            $this->assertTrue(Storage::disk('public')->exists($defaultPath));
+        });
+
+        // Default transaction successfully committed -> default file MUST be retained!
+        $this->assertTrue(Storage::disk('public')->exists($defaultPath));
+        $this->assertFalse(Storage::disk('public')->exists($tenantPath));
+    }
 }

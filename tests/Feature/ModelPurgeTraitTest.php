@@ -206,4 +206,33 @@ class ModelPurgeTraitTest extends TestCase
         $this->assertTrue(Storage::disk('public')->exists('reviews/pic_keep.webp'));
         $this->assertTrue(Storage::disk('public')->exists('reviews/pic_new.webp'));
     }
+
+    public function test_purges_nested_array_and_object_column_updates_without_array_to_string_warning(): void
+    {
+        Storage::disk('public')->put('reviews/obj_keep.webp', 'keep');
+        Storage::disk('public')->put('reviews/obj_remove.webp', 'remove');
+        Storage::disk('public')->put('reviews/obj_new.webp', 'new');
+
+        // Column storing array of objects/DTO-like arrays with 'path' and 'url'
+        $review = TestReview::create([
+            'comment' => 'Nested array review',
+            'photos' => [
+                ['path' => 'reviews/obj_keep.webp', 'url' => 'https://example.com/keep'],
+                ['path' => 'reviews/obj_remove.webp', 'url' => 'https://example.com/remove'],
+            ],
+        ]);
+
+        // Update removing obj_remove and adding obj_new
+        $review->update([
+            'photos' => [
+                ['path' => 'reviews/obj_keep.webp', 'url' => 'https://example.com/keep'],
+                ['path' => 'reviews/obj_new.webp', 'url' => 'https://example.com/new'],
+            ],
+        ]);
+
+        // obj_remove must be purged from disk, others preserved, with zero PHP warnings
+        $this->assertFalse(Storage::disk('public')->exists('reviews/obj_remove.webp'));
+        $this->assertTrue(Storage::disk('public')->exists('reviews/obj_keep.webp'));
+        $this->assertTrue(Storage::disk('public')->exists('reviews/obj_new.webp'));
+    }
 }

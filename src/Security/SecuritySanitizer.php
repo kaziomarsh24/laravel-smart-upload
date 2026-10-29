@@ -20,12 +20,17 @@ class SecuritySanitizer
     public function __construct(
         protected array $disallowedExtensions = []
     ) {
+        $baseline = [
+            'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'pht', 'phar', 'phps',
+            'phtml', 'exe', 'sh', 'bat', 'cgi', 'pl', 'py', 'jar', 'jsp', 'asp',
+            'aspx', 'vbs', 'com', 'htaccess', 'html', 'htm'
+        ];
+
         if (empty($this->disallowedExtensions)) {
-            $this->disallowedExtensions = config('smart-upload.disallowed_extensions', [
-                'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'pht', 'phar', 'phps',
-                'phtml', 'exe', 'sh', 'bat', 'cgi', 'pl', 'py', 'jar', 'jsp', 'asp',
-                'aspx', 'vbs', 'com', 'htaccess', 'html', 'htm'
-            ]);
+            $configured = config('smart-upload.disallowed_extensions', []);
+            $this->disallowedExtensions = array_values(array_unique(array_merge($baseline, $configured)));
+        } else {
+            $this->disallowedExtensions = array_values(array_unique(array_merge($baseline, $this->disallowedExtensions)));
         }
     }
 
