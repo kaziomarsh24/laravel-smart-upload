@@ -38,6 +38,7 @@ if ($chunk->isComplete()) {
 - [Quickstart in 10 Seconds](#quickstart-in-10-seconds)
 - [Architectural Philosophy](#architectural-philosophy)
 - [Layer 1: The Fluent Upload Engine (`Upload::`)](#layer-1-the-fluent-upload-engine-upload)
+  - [Master Method Cheat Sheet & Decision Guide](#master-method-cheat-sheet--decision-guide)
   - [1.1 Single Image Upload (WebP & Compression)](#11-single-image-upload-webp--compression)
   - [1.2 Smart Image Sizing (`scaleDown` vs `fit`)](#12-smart-image-sizing-scaledown-vs-fit)
   - [1.3 Order-Independent Fluent Chaining](#13-order-independent-fluent-chaining)
@@ -192,6 +193,24 @@ Laravel Smart Upload was built on five core architectural tenets:
 ---
 
 ## Layer 1: The Fluent Upload Engine (`Upload::`)
+
+### Master Method Cheat Sheet & Decision Guide
+Every method in the builder chain is **order-independent** and serves a specific architectural purpose. Use this quick reference to know exactly which method to pick, when it is unnecessary, and its alternative:
+
+| Chained Method | When to Use It (Primary Use Case) | When NOT to Use It | Alternative / Counterpart |
+| :--- | :--- | :--- | :--- |
+| **`->toWebp(?$q)`** | Force convert any image to modern, lightweight WebP format. | Unnecessary if `'auto_webp' => true` in config (it is already active by default). | `->keepOriginalFormat()` |
+| **`->keepOriginalFormat()`** | Retain original format (e.g. animated GIFs, lossless PNG brand logos, or legacy app compatibility). | Don't use when minimal bandwidth and fast loading speed are your priority. | Default Auto-WebP or `->toWebp()` |
+| **`->quality(int $q)`** | Fine-tune image compression ratio (1-100). E.g. `60` for thumbnails, `90` for crisp product photos. | Unnecessary if default quality (`85`) in config is already optimal for you. | `->toWebp(quality: $q)` or config |
+| **`->scaleDown($w, $h)`** | Banners, article heroes, and gallery photos. Downscales preserving aspect ratio; **never stretches smaller images**. | Don't use when you need an exact square crop with zero letterboxing. | `->fit($width, $height)` |
+| **`->fit($w, $h)`** | Square profile avatars, thumbnails, or icons. Smartly center-crops to fill exact dimensions. | Don't use when cropping out image edges is unacceptable (e.g. panoramic landscapes). | `->scaleDown($w, $h)` |
+| **`->preset($name)`** | Reusable sizing/quality configs (e.g. `avatar`, `banner`) declared once in `config/smart-upload.php`. | Unnecessary for one-off custom dimensions. | Manually chaining `->fit()->toWebp()` |
+| **`->disk($disk)`** | Route this specific upload to cloud storage (`s3`, `r2`, `spaces`) or private disk. | Unnecessary if storing to the default disk configured in `smart-upload.php`. | Set `'disk' => 's3'` globally in config |
+| **`->replace($oldPath)`** | Auto-delete previous file from disk upon successful save (e.g. updating avatar via `DB::table()`). | **NEVER needed if your model uses `HasUploadPurge`!** (The trait auto-deletes old files upon `$user->update()`). | Use `HasUploadPurge` trait on Model |
+| **`->temporary()`** | Stage upload in isolated temp storage during multi-step registration or SPA wizards. | Don't use for standard, immediate form submissions. | `Upload::temp($file)` one-liner |
+| **`->save($directory)`** | **Terminal execution method.** Runs the optimized pipeline, verifies security, writes to disk, and arms transaction shields. | Must be called at the very end of the chain. | — |
+
+---
 
 ### 1.1 Single Image Upload (WebP & Compression)
 Convert images to high-performance WebP formats while reducing bandwidth and storage costs:
