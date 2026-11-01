@@ -512,8 +512,8 @@ Attackers often rename malicious scripts (e.g., `backdoor.php` to `photo.jpg`) t
 ### 2.7 Executable Extension Blacklist & Whitelist Overrides
 By default, Smart Upload blocks a baseline of executable extensions (`php`, `exe`, `sh`, `bat`, `py`, `js`, `html`, etc.) in `config/smart-upload.php`.
 * **Disallowed Extensions (`disallowed_extensions`):** You can append extra extensions to forbid (e.g. `vbs`, `jar`).
-* **Allowed Extensions Override (`allowed_extensions`):** Useful for developer portals or specific projects where scripts (e.g. `.py`, `.sh`) are deliberately permitted. Any extension added here bypasses extension and MIME blocks.
-* **Unbypassable Exploit Guard:** Critical server execution exploits (`php`, `phar`, `htaccess`) can **never** be whitelisted. Smart Upload permanently rejects them even if configured in `allowed_extensions`.
+* **Allowed Extensions Override (`allowed_extensions`):** Useful for developer portals or specific projects where scripts (e.g. `.py`, `.sh`) are deliberately permitted. Allowed extensions bypass extension and double-extension checks (and corresponding MIME blocks for `sh`/`bash` and `html`/`htm`).
+* **Unbypassable Exploit Guard:** Critical server execution exploits (`php`, `phar`, `htaccess`) can **never** be whitelisted. Smart Upload permanently rejects them even if configured in `allowed_extensions`. (Note: Server-side script extensions like `jsp`, `asp`, `aspx`, `cgi`, `pl` are blocked by default; only allow them if your server environment does not execute them in storage directories).
 
 ```php
 // config/smart-upload.php
