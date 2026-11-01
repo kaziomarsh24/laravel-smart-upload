@@ -37,6 +37,8 @@ class SmartUploader implements UploaderInterface
     protected bool $isTemporary = false;
     protected ?string $promotedTempStoragePath = null;
     protected ?string $promotedTempDisk = null;
+    /** @var array<string, array<string, mixed>> */
+    protected array $variantDefinitions = [];
 
     public function __construct(
         protected ImageProcessor $imageProcessor = new ImageProcessor(),
@@ -148,6 +150,17 @@ class SmartUploader implements UploaderInterface
     public function fit(int $width, int $height): static
     {
         $this->fitDimensions = ['width' => $width, 'height' => $height];
+        return $this;
+    }
+
+    /**
+     * Define multi-size responsive image variants to generate (e.g. mobile, tablet, thumb).
+     *
+     * @param array<string, array<string, mixed>> $variants
+     */
+    public function variants(array $variants): static
+    {
+        $this->variantDefinitions = $variants;
         return $this;
     }
 
@@ -273,6 +286,40 @@ class SmartUploader implements UploaderInterface
             Storage::disk($disk)->put($path, $encoded);
             $size = strlen($encoded);
             $mime = $this->imageProcessor->getMimeForFormat($actualFormat);
+
+            // Process responsive image variants if requested
+            $generatedVariants = [];
+            if (!empty($this->variantDefinitions) && is_array($this->variantDefinitions)) {
+                $baseNameWithoutExt = pathinfo($filename, PATHINFO_FILENAME);
+                foreach ($this->variantDefinitions as $variantKey => $variantOptions) {
+                    $cleanKey = Str::slug((string) $variantKey, '_');
+                    if ($cleanKey === '') {
+                        continue;
+                    }
+
+                    $variantFilename = "{$baseNameWithoutExt}_{$cleanKey}.{$actualFormat}";
+                    $variantPath = $targetDir ? "{$targetDir}/{$variantFilename}" : $variantFilename;
+
+                    // Re-read or process fresh variant instance
+                    $variantImage = $this->imageProcessor->read($file);
+
+                    if (isset($variantOptions['fit']) && is_array($variantOptions['fit'])) {
+                        $variantImage = $this->imageProcessor->fit($variantImage, $variantOptions['fit'][0], $variantOptions['fit'][1] ?? $variantOptions['fit'][0]);
+                    } elseif (isset($variantOptions['scale_down'])) {
+                        $scaleParams = is_array($variantOptions['scale_down']) ? $variantOptions['scale_down'] : [$variantOptions['scale_down'], null];
+                        $variantImage = $this->imageProcessor->scaleDown($variantImage, $scaleParams[0], $scaleParams[1] ?? null);
+                    }
+
+                    $variantQuality = $variantOptions['quality'] ?? $quality;
+                    [$varEncoded] = $this->imageProcessor->encodeSafe($variantImage, $actualFormat, $variantQuality);
+
+                    Storage::disk($disk)->put($variantPath, $varEncoded);
+                    TransactionShield::guard($disk, $variantPath);
+
+                    $generatedVariants[$variantKey] = $variantPath;
+                    unset($variantImage, $varEncoded);
+                }
+            }
         } else {
             $extension = $file->getClientOriginalExtension();
             $filename = $this->sanitizer->generateUniqueName($file, $extension);
@@ -303,13 +350,39 @@ class SmartUploader implements UploaderInterface
             mimeType: $mime,
             size: $size,
             disk: $disk,
-            isTemporary: false
+            isTemporary: false,
+            variants: $generatedVariants ?? []
         );
     }
 
-    public function delete(?string $pathOrUrl, ?string $disk = null): bool
+    /**
+     * Delete one or multiple files/URLs from disk safely.
+     * Supports single string path, URL, array of paths, associative variant maps, or raw JSON.
+     *
+     * @param string|array<mixed>|null $pathOrPaths
+     */
+    public function delete(string|array|null $pathOrPaths, ?string $disk = null): bool
     {
-        return $this->deleteFile($pathOrUrl, $disk);
+        return $this->deleteFile($pathOrPaths, $disk);
+    }
+
+    /**
+     * Compute the relative path for a given variant of a stored image.
+     */
+    public function variantPath(string $path, string $variant): string
+    {
+        $cleanVariant = Str::slug($variant, '_');
+        if ($cleanVariant === '') {
+            return $path;
+        }
+
+        $dir = pathinfo($path, PATHINFO_DIRNAME);
+        $filename = pathinfo($path, PATHINFO_FILENAME);
+        $ext = pathinfo($path, PATHINFO_EXTENSION);
+
+        $variantFilename = "{$filename}_{$cleanVariant}" . ($ext ? ".{$ext}" : '');
+
+        return ($dir && $dir !== '.') ? "{$dir}/{$variantFilename}" : $variantFilename;
     }
 
     /**
@@ -360,22 +433,59 @@ class SmartUploader implements UploaderInterface
         return Storage::disk($targetDisk)->url($cleanPath);
     }
 
-    public function deleteFile(?string $pathOrUrl, ?string $disk = null): bool
+    /**
+     * Delete one or multiple files/URLs from disk safely.
+     * Supports single string path, URL, array of paths, associative variant maps, or raw JSON.
+     *
+     * @param string|array<mixed>|null $pathOrPaths
+     */
+    public function deleteFile(string|array|null $pathOrPaths, ?string $disk = null): bool
     {
-        if (!$pathOrUrl) {
+        if (empty($pathOrPaths)) {
             return false;
         }
 
+        // Support raw JSON strings (e.g. '["a.webp","b.webp"]' or '{"thumb":"a.webp"}')
+        if (is_string($pathOrPaths) && (str_starts_with($pathOrPaths, '[') || str_starts_with($pathOrPaths, '{'))) {
+            $decoded = json_decode($pathOrPaths, true);
+            if (is_array($decoded)) {
+                $pathOrPaths = $decoded;
+            }
+        }
+
+        // Handle array of paths or associative dictionary
+        if (is_array($pathOrPaths)) {
+            $isAssoc = count(array_filter(array_keys($pathOrPaths), 'is_string')) > 0;
+
+            // Associative DTO pattern: check for common path keys or delete all variant values
+            if ($isAssoc) {
+                if (isset($pathOrPaths['path']) && is_string($pathOrPaths['path'])) {
+                    return $this->deleteFile($pathOrPaths['path'], $disk);
+                }
+            }
+
+            $allDeleted = true;
+            foreach ($pathOrPaths as $item) {
+                if (is_string($item) || is_array($item)) {
+                    if (!$this->deleteFile($item, $disk)) {
+                        $allDeleted = false;
+                    }
+                }
+            }
+
+            return $allDeleted;
+        }
+
         $targetDisk = $disk ?: $this->resolveDisk();
-        $actualPath = $pathOrUrl;
+        $actualPath = trim((string) $pathOrPaths);
 
         // Path traversal / null-byte attack guard
         if (str_contains($actualPath, '..') || str_contains($actualPath, "\0")) {
             return false;
         }
 
-        if (Str::startsWith($pathOrUrl, ['http://', 'https://'])) {
-            $urlHost = parse_url($pathOrUrl, PHP_URL_HOST);
+        if (Str::startsWith($actualPath, ['http://', 'https://'])) {
+            $urlHost = parse_url($actualPath, PHP_URL_HOST);
 
             try {
                 $diskUrl = Storage::disk($targetDisk)->url('');
@@ -391,7 +501,7 @@ class SmartUploader implements UploaderInterface
                 return false;
             }
 
-            $parsed = parse_url($pathOrUrl, PHP_URL_PATH);
+            $parsed = parse_url($actualPath, PHP_URL_PATH);
             $decoded = urldecode($parsed ?: '');
             $actualPath = (string) preg_replace('#^/?storage/#', '', $decoded);
         }
@@ -408,6 +518,98 @@ class SmartUploader implements UploaderInterface
             return $storage->exists($actualPath) ? $storage->delete($actualPath) : false;
         } catch (\Throwable) {
             return false;
+        }
+    }
+
+    /**
+     * Download a file from local or cloud storage and return a StreamedResponse.
+     *
+     * @param string $path
+     * @param string|null $filename Custom download filename (defaults to basename of path)
+     * @param array<string, mixed> $headers Optional HTTP response headers
+     * @param string|null $disk Target filesystem disk
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse
+     * @throws \KaziOmar\SmartUpload\Exceptions\UploadException
+     */
+    public function download(string $path, ?string $filename = null, array $headers = [], ?string $disk = null): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $targetDisk = $disk ?: $this->resolveDisk();
+        $actualPath = trim($path);
+
+        if (str_contains($actualPath, '..') || str_contains($actualPath, "\0")) {
+            throw new \KaziOmar\SmartUpload\Exceptions\UploadException("Invalid path or traversal attempt: {$path}");
+        }
+
+        $actualPath = ltrim($actualPath, '/');
+        $actualPath = (string) preg_replace('#^storage/#', '', $actualPath);
+
+        $storage = Storage::disk($targetDisk);
+        if (!$storage->exists($actualPath)) {
+            throw new \KaziOmar\SmartUpload\Exceptions\UploadException("File not found on disk [{$targetDisk}]: {$path}");
+        }
+
+        return $storage->download($actualPath, $filename, $headers);
+    }
+
+    /**
+     * Stream an inline response of a private/local file for in-browser preview (e.g. PDF or image).
+     *
+     * @param string $path
+     * @param array<string, mixed> $headers
+     * @param string|null $disk
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse
+     * @throws \KaziOmar\SmartUpload\Exceptions\UploadException
+     */
+    public function response(string $path, array $headers = [], ?string $disk = null): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $targetDisk = $disk ?: $this->resolveDisk();
+        $actualPath = trim($path);
+
+        if (str_contains($actualPath, '..') || str_contains($actualPath, "\0")) {
+            throw new \KaziOmar\SmartUpload\Exceptions\UploadException("Invalid path or traversal attempt: {$path}");
+        }
+
+        $actualPath = ltrim($actualPath, '/');
+        $actualPath = (string) preg_replace('#^storage/#', '', $actualPath);
+
+        $storage = Storage::disk($targetDisk);
+        if (!$storage->exists($actualPath)) {
+            throw new \KaziOmar\SmartUpload\Exceptions\UploadException("File not found on disk [{$targetDisk}]: {$path}");
+        }
+
+        return $storage->response($actualPath, headers: $headers);
+    }
+
+    /**
+     * Generate a temporary signed URL for a private cloud storage file (e.g. AWS S3, Cloudflare R2).
+     *
+     * @param string $path
+     * @param \DateTimeInterface|int $expiration Expiration time or minutes integer
+     * @param array<string, mixed> $options
+     * @param string|null $disk
+     * @return string
+     * @throws \KaziOmar\SmartUpload\Exceptions\UploadException
+     */
+    public function temporaryUrl(string $path, \DateTimeInterface|int $expiration = 15, array $options = [], ?string $disk = null): string
+    {
+        $targetDisk = $disk ?: $this->resolveDisk();
+        $actualPath = trim($path);
+
+        if (str_contains($actualPath, '..') || str_contains($actualPath, "\0")) {
+            throw new \KaziOmar\SmartUpload\Exceptions\UploadException("Invalid path or traversal attempt: {$path}");
+        }
+
+        $actualPath = ltrim($actualPath, '/');
+        $actualPath = (string) preg_replace('#^storage/#', '', $actualPath);
+
+        $storage = Storage::disk($targetDisk);
+
+        $expirationTime = is_int($expiration) ? now()->addMinutes($expiration) : $expiration;
+
+        try {
+            return $storage->temporaryUrl($actualPath, $expirationTime, $options);
+        } catch (\Throwable $e) {
+            throw new \KaziOmar\SmartUpload\Exceptions\UploadException("Temporary URL generation failed for disk [{$targetDisk}]: " . $e->getMessage(), previous: $e);
         }
     }
 

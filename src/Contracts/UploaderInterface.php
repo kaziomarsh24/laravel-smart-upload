@@ -51,6 +51,13 @@ interface UploaderInterface
     public function fit(int $width, int $height): static;
 
     /**
+     * Define multi-size responsive image variants to generate (e.g. mobile, tablet, thumb).
+     *
+     * @param array<string, array<string, mixed>> $variants
+     */
+    public function variants(array $variants): static;
+
+    /**
      * Replace an existing file on disk upon successful save.
      */
     public function replace(?string $oldPathOrUrl): static;

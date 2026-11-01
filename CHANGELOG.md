@@ -5,6 +5,21 @@ All notable changes to `thekaziomar/laravel-smart-upload` will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-11-01
+
+### Added
+- **Responsive Image Variants (`->variants()`):** Easily generate multi-size responsive images (mobile, tablet, desktop, thumb) in a single fluent chain. Follows SEO-First naming (`{slug}_{token}_{variant}.webp`) and memory-friendly cascade processing.
+- **DTO Variant URLs & Array Helpers:** `UploadResult` now exposes `variants` (paths map) and `variantUrls()` (fully qualified URLs map).
+- **Variant URL Helper (`upload_url()`):** `upload_url($path, variant: 'thumb')` automatically resolves variant URLs from stored base image paths.
+- **Private File Download & Inline Streaming (`Upload::download()` & `Upload::response()`):** Stream private/local files directly to browsers with custom download filenames or inline PDF/image preview.
+- **Temporary Signed Cloud URLs (`Upload::temporaryUrl()`):** Easily generate time-limited secure signed URLs for private S3 or Cloudflare R2 bucket objects.
+- **Polymorphic File Deletion (`Upload::delete()`):** `Upload::delete()` now seamlessly handles single strings, full URLs, arrays of paths (`$product->photos`), variant maps, and raw JSON strings.
+- **Variant Family Auto-Purging (`HasUploadPurge`):** Deleting a model or changing an image automatically purges the primary file as well as all generated sibling variants (`_thumb`, `_mobile`, `_hd`) from disk.
+- **Visual Architecture Diagrams:** Added rich sequence diagrams for Database Transaction Rollback Flow and Mobile/SPA Camera 2-Step Upload Flow under `art/`.
+
+### Improvements
+- Expanded test suite to **64 test cases and 215 assertions (100% pass rate)**.
+
 ## [1.0.3] - 2026-10-29
 
 ### Security Hardening

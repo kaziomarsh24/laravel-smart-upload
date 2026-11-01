@@ -15,6 +15,9 @@ use JsonSerializable;
  */
 class UploadResult implements Arrayable, Jsonable, JsonSerializable
 {
+    /**
+     * @param array<string, string> $variants Key-value map of variant names to paths
+     */
     public function __construct(
         public readonly string $path,
         public readonly string $url,
@@ -24,7 +27,8 @@ class UploadResult implements Arrayable, Jsonable, JsonSerializable
         public readonly string $mimeType,
         public readonly int $size,
         public readonly string $disk,
-        public readonly bool $isTemporary = false
+        public readonly bool $isTemporary = false,
+        public readonly array $variants = []
     ) {
     }
 
@@ -44,17 +48,41 @@ class UploadResult implements Arrayable, Jsonable, JsonSerializable
     }
 
     /**
-     * Delete this file from its storage disk.
+     * Delete this file and all its generated variants from storage disk.
      */
     public function delete(): bool
     {
         $storage = Storage::disk($this->disk);
+        $deleted = true;
 
         if ($storage->exists($this->path)) {
-            return $storage->delete($this->path);
+            $deleted = $storage->delete($this->path);
         }
 
-        return false;
+        foreach ($this->variants as $variantPath) {
+            if ($storage->exists($variantPath)) {
+                $storage->delete($variantPath);
+            }
+        }
+
+        return $deleted;
+    }
+
+    /**
+     * Get fully qualified URLs for all generated variants.
+     *
+     * @return array<string, string>
+     */
+    public function variantUrls(): array
+    {
+        $storage = Storage::disk($this->disk);
+        $urls = [];
+
+        foreach ($this->variants as $name => $variantPath) {
+            $urls[$name] = $storage->url($variantPath);
+        }
+
+        return $urls;
     }
 
     /**
@@ -95,6 +123,8 @@ class UploadResult implements Arrayable, Jsonable, JsonSerializable
             'size_formatted' => $this->sizeFormatted(),
             'disk' => $this->disk,
             'is_temporary' => $this->isTemporary,
+            'variants' => $this->variants,
+            'variant_urls' => $this->variantUrls(),
         ];
     }
 

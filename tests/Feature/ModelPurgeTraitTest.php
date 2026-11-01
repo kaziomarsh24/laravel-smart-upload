@@ -297,4 +297,27 @@ class ModelPurgeTraitTest extends TestCase
         $this->assertFalse(Storage::disk('public')->exists('avatars/leading_slash.webp'));
         $this->assertFalse(Storage::disk('public')->exists('avatars/from_url.webp'));
     }
+
+    public function test_safe_purge_automatically_cleans_sibling_responsive_variants(): void
+    {
+        Storage::disk('public')->put('banners/campaign_xyz123.webp', 'main');
+        Storage::disk('public')->put('banners/campaign_xyz123_thumb.webp', 'thumb');
+        Storage::disk('public')->put('banners/campaign_xyz123_mobile.webp', 'mobile');
+        Storage::disk('public')->put('banners/other_campaign.webp', 'dont_delete_this');
+
+        $user = TestUser::create([
+            'name' => 'Variant Purge Test',
+            'avatar' => 'banners/campaign_xyz123.webp',
+        ]);
+
+        $user->delete();
+
+        // Main and all variant siblings must be purged
+        $this->assertFalse(Storage::disk('public')->exists('banners/campaign_xyz123.webp'));
+        $this->assertFalse(Storage::disk('public')->exists('banners/campaign_xyz123_thumb.webp'));
+        $this->assertFalse(Storage::disk('public')->exists('banners/campaign_xyz123_mobile.webp'));
+
+        // Sibling belonging to another campaign must remain untouched!
+        $this->assertTrue(Storage::disk('public')->exists('banners/other_campaign.webp'));
+    }
 }

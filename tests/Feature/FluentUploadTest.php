@@ -396,4 +396,88 @@ class FluentUploadTest extends TestCase
         $this->assertFalse(Upload::delete('avatars/../secrets.env'));
         $this->assertFalse(Upload::delete("avatars/pic.jpg\0"));
     }
+
+    public function test_delete_supports_polymorphic_arguments_arrays_and_json(): void
+    {
+        Storage::disk('public')->put('products/1.webp', 'p1');
+        Storage::disk('public')->put('products/2.webp', 'p2');
+        Storage::disk('public')->put('products/3.webp', 'p3');
+
+        // 1. Array of paths
+        $this->assertTrue(Upload::delete(['products/1.webp', 'products/2.webp']));
+        $this->assertFalse(Storage::disk('public')->exists('products/1.webp'));
+        $this->assertFalse(Storage::disk('public')->exists('products/2.webp'));
+        $this->assertTrue(Storage::disk('public')->exists('products/3.webp'));
+
+        // 2. Raw JSON string array
+        $this->assertTrue(Upload::delete('["products/3.webp"]'));
+        $this->assertFalse(Storage::disk('public')->exists('products/3.webp'));
+
+        // 3. Associative map / variants
+        Storage::disk('public')->put('banners/large.webp', 'large');
+        Storage::disk('public')->put('banners/small.webp', 'small');
+
+        $this->assertTrue(Upload::delete([
+            'desktop' => 'banners/large.webp',
+            'mobile'  => 'banners/small.webp',
+        ]));
+        $this->assertFalse(Storage::disk('public')->exists('banners/large.webp'));
+        $this->assertFalse(Storage::disk('public')->exists('banners/small.webp'));
+    }
+
+    public function test_private_file_download_and_response_streaming(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('contracts/nda.pdf', 'Confidential contract bytes');
+
+        // 1. Download response
+        $response = Upload::download('contracts/nda.pdf', filename: 'signed_nda.pdf', disk: 'local');
+        $this->assertInstanceOf(\Symfony\Component\HttpFoundation\StreamedResponse::class, $response);
+        $this->assertStringContainsString('signed_nda.pdf', (string) $response->headers->get('content-disposition'));
+
+        // 2. Inline response
+        $inlineResponse = Upload::response('contracts/nda.pdf', disk: 'local');
+        $this->assertInstanceOf(\Symfony\Component\HttpFoundation\StreamedResponse::class, $inlineResponse);
+    }
+
+    public function test_responsive_image_variants_generation_and_urls(): void
+    {
+        $fakeImage = $this->createFakeImage('hero.jpg', 1600, 900);
+        $file = new UploadedFile($fakeImage, 'hero.jpg', 'image/jpeg', null, true);
+
+        $result = Upload::file($file)
+            ->variants([
+                'thumb'  => ['fit' => [150, 150]],
+                'mobile' => ['scale_down' => 480],
+                'hd'     => ['scale_down' => 1200],
+            ])
+            ->save('banners');
+
+        $this->assertArrayHasKey('thumb', $result->variants);
+        $this->assertArrayHasKey('mobile', $result->variants);
+        $this->assertArrayHasKey('hd', $result->variants);
+
+        // Verify variants exist in storage
+        $this->assertTrue(Storage::disk('public')->exists($result->path));
+        $this->assertTrue(Storage::disk('public')->exists($result->variants['thumb']));
+        $this->assertTrue(Storage::disk('public')->exists($result->variants['mobile']));
+        $this->assertTrue(Storage::disk('public')->exists($result->variants['hd']));
+
+        // Verify variantUrls method
+        $urls = $result->variantUrls();
+        $this->assertStringContainsString('thumb', $urls['thumb']);
+
+        // Verify helper function upload_url with variant
+        $thumbUrl = upload_url($result->path, variant: 'thumb');
+        $this->assertStringContainsString('_thumb.webp', (string) $thumbUrl);
+
+        // Delete cleans up primary and all variants
+        $result->delete();
+        $this->assertFalse(Storage::disk('public')->exists($result->path));
+        $this->assertFalse(Storage::disk('public')->exists($result->variants['thumb']));
+        $this->assertFalse(Storage::disk('public')->exists($result->variants['mobile']));
+        $this->assertFalse(Storage::disk('public')->exists($result->variants['hd']));
+
+        @unlink($fakeImage);
+    }
 }

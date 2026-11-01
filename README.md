@@ -384,12 +384,58 @@ $url = Upload::url('logo.png', defaultDir: 'stores/logos');
 // 4. Fallback placeholder for null/empty database columns
 $url = Upload::url($user->avatar, fallback: 'https://placehold.co/150x150.png');
 
-// 5. Global helper function anywhere in Blade views or resources:
+// 5. Resolve responsive variant URLs automatically:
+$url = upload_url($product->image, variant: 'thumb');
+// https://example.com/storage/products/shirt_xyz_thumb.webp
+
+// 6. Global helper function anywhere in Blade views or resources:
 echo upload_url($user->avatar);
 ```
 
-### 1.11 Manual File Deletion (`Upload::delete()`)
-When you want to explicitly delete a file from disk without relying on model events:
+### 1.11 Multi-Size Responsive Image Variants (`->variants()`)
+Generate optimized responsive versions (mobile, tablet, desktop, thumb) in one fluent pass following SEO-First naming:
+
+```php
+use KaziOmar\SmartUpload\Facades\Upload;
+
+$result = Upload::file($request->file('banner'))
+    ->variants([
+        'thumb'   => ['fit' => [150, 150]],
+        'mobile'  => ['scale_down' => 480],
+        'tablet'  => ['scale_down' => 768],
+        'desktop' => ['scale_down' => 1200],
+    ])
+    ->save('banners');
+
+// 1. Primary image path & all generated variant paths:
+// $result->path                 => 'banners/banner_a8Fk.webp'
+// $result->variants['mobile']    => 'banners/banner_a8Fk_mobile.webp'
+// $result->variants['thumb']     => 'banners/banner_a8Fk_thumb.webp'
+
+// 2. Full URLs for all variants:
+$urls = $result->variantUrls();
+// $urls['mobile'] => 'https://example.com/storage/banners/banner_a8Fk_mobile.webp'
+```
+
+### 1.12 Private File Downloads & Temporary Signed Cloud URLs
+Handle confidential documents (National IDs, invoices, contracts) stored in private local or S3/R2 storage with zero boilerplate:
+
+```php
+use KaziOmar\SmartUpload\Facades\Upload;
+
+// 1. Force browser download of private file with custom filename:
+return Upload::download('contracts/nda.pdf', filename: 'Signed_NDA.pdf', disk: 'local');
+
+// 2. Stream inline preview for in-browser PDF/image rendering:
+return Upload::response('invoices/inv_102.pdf', disk: 'local');
+
+// 3. Generate time-limited expiring signed URL for private S3 / Cloudflare R2:
+$signedUrl = Upload::temporaryUrl('private/tax_doc.pdf', expiration: 15, disk: 's3');
+return redirect($signedUrl);
+```
+
+### 1.13 Polymorphic File Deletion (`Upload::delete()`)
+When you want to explicitly delete files from disk without relying on model events:
 
 ```php
 use KaziOmar\SmartUpload\Facades\Upload;
@@ -400,11 +446,14 @@ Upload::delete('avatars/old_pic.webp');
 // 2. Delete by full public URL (automatically parses path):
 Upload::delete('https://yourdomain.com/storage/avatars/old_pic.webp');
 
-// 3. Delete from custom storage disk (e.g. S3):
-Upload::delete('contracts/doc.pdf', disk: 's3');
+// 3. Delete array of paths or Eloquent JSON column ($product->photos):
+Upload::delete(['products/1.webp', 'products/2.webp']);
 
-// 4. Directly from an UploadResult or UploadCollection DTO:
-$result->delete();     // Deletes this specific file
+// 4. Delete associative variant map:
+Upload::delete($banner->images); // ['desktop' => '...', 'mobile' => '...']
+
+// 5. Directly from an UploadResult or UploadCollection DTO:
+$result->delete();     // Deletes this specific file and all its variants!
 $collection->delete(); // Batch deletes all uploaded files
 ```
 
@@ -451,26 +500,9 @@ Smart Upload automatically detects if an upload is executing inside an active da
 ### 3.3 Transaction Rollback Workflow
 When active, Smart Upload listens to Laravel's `TransactionRolledBack` event. If the database transaction fails or throws an exception, Smart Upload automatically issues an immediate delete request to remove the file from storage!
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Client
-    participant Controller
-    participant SmartUpload as Smart Upload Engine
-    participant S3 as Storage / S3
-    participant DB as Database (Transaction)
-
-    Client->>Controller: Submit Form with File
-    Controller->>DB: Begin DB::transaction()
-    Controller->>SmartUpload: Upload::file()->save('invoices')
-    SmartUpload->>S3: Stream write file to S3
-    SmartUpload->>DB: Register Rollback Listener (Shield)
-    Controller->>DB: Insert Invoice Record
-    DB-->>Controller: SQL Exception (Rollback!)
-    DB->>SmartUpload: Fire TransactionRolledBack Event
-    SmartUpload->>S3: Auto-Delete Ghost File from S3!
-    Controller-->>Client: 500 / 422 Error (No Orphaned Files)
-```
+<p align="center">
+  <img src="art/transaction-rollback-flow.png" alt="Database Transaction Rollback Flow" width="900">
+</p>
 
 ---
 
@@ -525,25 +557,9 @@ Calling `->save()` on an incomplete chunk upload throws a `ChunkException`, prev
 
 ### 5.2 Livewire, React, Flutter & React Native Workflows
 
-```mermaid
-sequenceDiagram
-    actor User as Mobile / SPA User
-    participant App as Flutter / React Native
-    participant API as Laravel Backend
-    participant Storage as Local / S3 Storage
-
-    User->>App: Pick Image from Camera
-    App->>API: POST /api/upload-temp
-    API->>Storage: Upload::temp($file)
-    Storage-->>API: Store in temp/ with UUID
-    API-->>App: Return { temp_path: "smart-upload/temp/uuid.jpg" }
-    App-->>User: Show Instant Preview
-    User->>App: Click "Complete Registration"
-    App->>API: POST /api/register { name, email, temp_path }
-    API->>Storage: Upload::fromTemp($temp_path)->toWebp()->save('avatars')
-    Storage-->>API: Move to permanent storage & WebP
-    API-->>App: Registration Complete!
-```
+<p align="center">
+  <img src="art/temp-upload-flow.png" alt="Mobile and SPA Camera Two-Step Upload Flow" width="900">
+</p>
 
 ### 5.3 Temporary Storage (`Upload::temp()`)
 ```php

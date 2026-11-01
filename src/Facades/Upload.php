@@ -21,8 +21,13 @@ use KaziOmar\SmartUpload\Support\TempUploadManager;
  * @method static SmartUploader request(Request $request, string $fieldName)
  * @method static SmartUploader disk(string $disk)
  * @method static SmartUploader preset(string $name)
+ * @method static SmartUploader variants(array $variants)
+ * @method static string variantPath(string $path, string $variant)
  * @method static string|null url(?string $pathOrUrl, ?string $defaultDir = null, ?string $disk = null, ?string $fallback = null)
- * @method static bool delete(?string $pathOrUrl, ?string $disk = null)
+ * @method static bool delete(string|array|null $pathOrPaths, ?string $disk = null)
+ * @method static \Symfony\Component\HttpFoundation\StreamedResponse download(string $path, ?string $filename = null, array $headers = [], ?string $disk = null)
+ * @method static \Symfony\Component\HttpFoundation\StreamedResponse response(string $path, array $headers = [], ?string $disk = null)
+ * @method static string temporaryUrl(string $path, \DateTimeInterface|int $expiration = 15, array $options = [], ?string $disk = null)
  *
  * @see \KaziOmar\SmartUpload\SmartUploader
  */

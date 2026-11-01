@@ -4,6 +4,7 @@ namespace KaziOmar\SmartUpload\Traits;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use KaziOmar\SmartUpload\Facades\Upload;
 
 /**
@@ -158,10 +159,37 @@ trait HasUploadPurge
             }
         }
 
-        if (DB::transactionLevel() > 0) {
-            DB::afterCommit(fn () => Upload::delete($path));
-        } else {
+        $purgeCallback = function () use ($path) {
             Upload::delete($path);
+
+            // Auto-purge sibling variants if present (e.g. filename_thumb.webp, filename_mobile.webp)
+            $dir = pathinfo($path, PATHINFO_DIRNAME);
+            $filename = pathinfo($path, PATHINFO_FILENAME);
+            $ext = pathinfo($path, PATHINFO_EXTENSION);
+
+            if ($filename !== '') {
+                $storage = Storage::disk(config('smart-upload.disk', config('filesystems.default', 'public')));
+                $scanDir = ($dir && $dir !== '.') ? $dir : '';
+
+                try {
+                    $filesInDir = $storage->files($scanDir);
+                    $prefixPattern = ($scanDir ? "{$scanDir}/" : "") . "{$filename}_";
+
+                    foreach ($filesInDir as $siblingFile) {
+                        if (str_starts_with($siblingFile, $prefixPattern)) {
+                            $storage->delete($siblingFile);
+                        }
+                    }
+                } catch (\Throwable) {
+                    // Gracefully ignore directory scan issues on restricted disks
+                }
+            }
+        };
+
+        if (DB::transactionLevel() > 0) {
+            DB::afterCommit($purgeCallback);
+        } else {
+            $purgeCallback();
         }
     }
 
