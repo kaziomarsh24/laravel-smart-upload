@@ -90,6 +90,10 @@ return [
     |
     | WARNING: Critical server-side executable extensions (php, phar, htaccess)
     | are permanently forbidden by Smart Upload and cannot be bypassed.
+    |
+    | SECURITY NOTE: If allowing 'html'/'htm', serve those uploaded files from an
+    | isolated sandboxed subdomain or with 'Content-Disposition: attachment' to
+    | prevent stored same-origin script execution vulnerabilities.
     */
     'allowed_extensions' => [],
 
