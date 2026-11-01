@@ -95,6 +95,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Recognized Responsive Variant Suffixes
+    |--------------------------------------------------------------------------
+    | Suffixes checked during file deletion / replacement to auto-purge related
+    | variants without performing expensive and broad directory-wide prefix scans.
+    */
+    'variant_names' => [
+        'thumb', 'thumbnail', 'mobile', 'tablet', 'desktop', 'hd', 'small', 'medium', 'large'
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Security: Purge Allowed Directories
     |--------------------------------------------------------------------------
     | Restricts automatic model file purging to specific directories

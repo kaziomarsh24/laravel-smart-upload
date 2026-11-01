@@ -423,6 +423,39 @@ class FluentUploadTest extends TestCase
         ]));
         $this->assertFalse(Storage::disk('public')->exists('banners/large.webp'));
         $this->assertFalse(Storage::disk('public')->exists('banners/small.webp'));
+
+        // 4. Associative array with non-file metadata must NOT delete root strings
+        Storage::disk('public')->put('Logo', 'keep_logo');
+        $this->assertFalse(Upload::delete(['label' => 'Logo']));
+        $this->assertTrue(Storage::disk('public')->exists('Logo'));
+    }
+
+    public function test_variant_path_preserves_external_urls(): void
+    {
+        $externalUrl = 'https://lh3.googleusercontent.com/a/xyz';
+        $this->assertEquals($externalUrl, Upload::variantPath($externalUrl, 'thumb'));
+        $this->assertEquals($externalUrl, upload_url($externalUrl, variant: 'thumb'));
+    }
+
+    public function test_fluent_replace_cleans_old_file_and_its_variants(): void
+    {
+        Storage::disk('public')->put('avatars/old_avatar.webp', 'old_main');
+        Storage::disk('public')->put('avatars/old_avatar_thumb.webp', 'old_thumb');
+        Storage::disk('public')->put('avatars/old_avatar_mobile.webp', 'old_mobile');
+
+        $fakeImage = $this->createFakeImage('new_avatar.jpg', 300, 300);
+        $file = new UploadedFile($fakeImage, 'new_avatar.jpg', 'image/jpeg', null, true);
+
+        Upload::file($file)
+            ->replace('avatars/old_avatar.webp')
+            ->save('avatars');
+
+        // Old avatar and all its variant siblings must be deleted
+        $this->assertFalse(Storage::disk('public')->exists('avatars/old_avatar.webp'));
+        $this->assertFalse(Storage::disk('public')->exists('avatars/old_avatar_thumb.webp'));
+        $this->assertFalse(Storage::disk('public')->exists('avatars/old_avatar_mobile.webp'));
+
+        @unlink($fakeImage);
     }
 
     public function test_private_file_download_and_response_streaming(): void

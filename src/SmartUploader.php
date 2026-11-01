@@ -215,15 +215,30 @@ class SmartUploader implements UploaderInterface
 
         $results = array_map(fn (UploadedFile $file) => $this->processAndSave($file, $directory), $this->files);
 
-        // Delete old replaced file with transaction rollback protection
+        // Delete old replaced file and its sibling variants with transaction rollback protection
         if ($this->replaceTarget !== null) {
             $target = $this->replaceTarget;
             $disk = $this->resolveDisk();
 
-            if (DB::transactionLevel() > 0) {
-                DB::afterCommit(fn () => $this->deleteFile($target, $disk));
-            } else {
+            $doReplace = function () use ($target, $disk) {
                 $this->deleteFile($target, $disk);
+
+                // Auto-delete sibling variants of the replaced file
+                if (is_string($target) && !str_starts_with($target, 'http://') && !str_starts_with($target, 'https://')) {
+                    $knownVariants = config('smart-upload.variant_names', ['thumb', 'thumbnail', 'mobile', 'tablet', 'desktop', 'hd', 'small', 'medium', 'large']);
+                    foreach ($knownVariants as $vName) {
+                        $vPath = $this->variantPath($target, $vName);
+                        if ($vPath !== $target) {
+                            $this->deleteFile($vPath, $disk);
+                        }
+                    }
+                }
+            };
+
+            if (DB::transactionLevel() > 0) {
+                DB::afterCommit($doReplace);
+            } else {
+                $doReplace();
             }
         }
 
@@ -287,11 +302,23 @@ class SmartUploader implements UploaderInterface
             $size = strlen($encoded);
             $mime = $this->imageProcessor->getMimeForFormat($actualFormat);
 
-            // Process responsive image variants if requested
+            // Process responsive image variants if requested using memory-friendly cascade
             $generatedVariants = [];
             if (!empty($this->variantDefinitions) && is_array($this->variantDefinitions)) {
                 $baseNameWithoutExt = pathinfo($filename, PATHINFO_FILENAME);
-                foreach ($this->variantDefinitions as $variantKey => $variantOptions) {
+
+                // Sort variants descending by target dimension to enable memory-friendly cascading downscale
+                $sortedVariants = $this->variantDefinitions;
+                uasort($sortedVariants, function ($a, $b) {
+                    $dimA = $a['scale_down'][0] ?? ($a['scale_down'] ?? ($a['fit'][0] ?? 0));
+                    $dimB = $b['scale_down'][0] ?? ($b['scale_down'] ?? ($b['fit'][0] ?? 0));
+                    return $dimB <=> $dimA;
+                });
+
+                // Keep working image instance in memory and cascade resize
+                $workingImage = $this->imageProcessor->read($file);
+
+                foreach ($sortedVariants as $variantKey => $variantOptions) {
                     $cleanKey = Str::slug((string) $variantKey, '_');
                     if ($cleanKey === '') {
                         continue;
@@ -300,14 +327,14 @@ class SmartUploader implements UploaderInterface
                     $variantFilename = "{$baseNameWithoutExt}_{$cleanKey}.{$actualFormat}";
                     $variantPath = $targetDir ? "{$targetDir}/{$variantFilename}" : $variantFilename;
 
-                    // Re-read or process fresh variant instance
-                    $variantImage = $this->imageProcessor->read($file);
-
                     if (isset($variantOptions['fit']) && is_array($variantOptions['fit'])) {
-                        $variantImage = $this->imageProcessor->fit($variantImage, $variantOptions['fit'][0], $variantOptions['fit'][1] ?? $variantOptions['fit'][0]);
+                        $variantImage = $this->imageProcessor->fit($workingImage, $variantOptions['fit'][0], $variantOptions['fit'][1] ?? $variantOptions['fit'][0]);
                     } elseif (isset($variantOptions['scale_down'])) {
                         $scaleParams = is_array($variantOptions['scale_down']) ? $variantOptions['scale_down'] : [$variantOptions['scale_down'], null];
-                        $variantImage = $this->imageProcessor->scaleDown($variantImage, $scaleParams[0], $scaleParams[1] ?? null);
+                        $workingImage = $this->imageProcessor->scaleDown($workingImage, $scaleParams[0], $scaleParams[1] ?? null);
+                        $variantImage = $workingImage;
+                    } else {
+                        $variantImage = $workingImage;
                     }
 
                     $variantQuality = $variantOptions['quality'] ?? $quality;
@@ -317,8 +344,10 @@ class SmartUploader implements UploaderInterface
                     TransactionShield::guard($disk, $variantPath);
 
                     $generatedVariants[$variantKey] = $variantPath;
-                    unset($variantImage, $varEncoded);
+                    unset($varEncoded);
                 }
+
+                unset($workingImage);
             }
         } else {
             $extension = $file->getClientOriginalExtension();
@@ -368,9 +397,17 @@ class SmartUploader implements UploaderInterface
 
     /**
      * Compute the relative path for a given variant of a stored image.
+     * Skips mutation if the target is an external HTTP/HTTPS URL or data URI.
      */
     public function variantPath(string $path, string $variant): string
     {
+        $trimmed = trim($path);
+
+        // Do not alter external URLs or data URIs
+        if (Str::startsWith($trimmed, ['http://', 'https://', '//', 'data:'])) {
+            return $trimmed;
+        }
+
         $cleanVariant = Str::slug($variant, '_');
         if ($cleanVariant === '') {
             return $path;
@@ -457,11 +494,34 @@ class SmartUploader implements UploaderInterface
         if (is_array($pathOrPaths)) {
             $isAssoc = count(array_filter(array_keys($pathOrPaths), 'is_string')) > 0;
 
-            // Associative DTO pattern: check for common path keys or delete all variant values
+            // Associative dictionary: only delete recognized path keys or registered variant keys
             if ($isAssoc) {
-                if (isset($pathOrPaths['path']) && is_string($pathOrPaths['path'])) {
-                    return $this->deleteFile($pathOrPaths['path'], $disk);
+                // 1. Direct candidate keys
+                $candidate = $pathOrPaths['path'] ?? $pathOrPaths['url'] ?? $pathOrPaths['file'] ?? null;
+                if (is_string($candidate)) {
+                    return $this->deleteFile($candidate, $disk);
                 }
+
+                // 2. Check if keys match known image variant names (e.g. ['thumb' => '...', 'mobile' => '...'])
+                $knownVariants = config('smart-upload.variant_names', ['thumb', 'thumbnail', 'mobile', 'tablet', 'desktop', 'hd', 'small', 'medium', 'large']);
+                $deletedAny = false;
+                $allVariantSuccess = true;
+
+                foreach ($pathOrPaths as $key => $val) {
+                    if (in_array((string) $key, $knownVariants, true) && (is_string($val) || is_array($val))) {
+                        $deletedAny = true;
+                        if (!$this->deleteFile($val, $disk)) {
+                            $allVariantSuccess = false;
+                        }
+                    }
+                }
+
+                if ($deletedAny) {
+                    return $allVariantSuccess;
+                }
+
+                // If arbitrary associative array with arbitrary keys (e.g. ['label' => 'Logo']), do NOT delete strings as paths!
+                return false;
             }
 
             $allDeleted = true;
@@ -577,7 +637,13 @@ class SmartUploader implements UploaderInterface
             throw new \KaziOmar\SmartUpload\Exceptions\UploadException("File not found on disk [{$targetDisk}]: {$path}");
         }
 
-        return $storage->response($actualPath, headers: $headers);
+        // Apply secure browser headers by default for inline previews
+        $defaultHeaders = [
+            'X-Content-Type-Options' => 'nosniff',
+            'Content-Security-Policy' => "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        ];
+
+        return $storage->response($actualPath, headers: array_merge($defaultHeaders, $headers));
     }
 
     /**

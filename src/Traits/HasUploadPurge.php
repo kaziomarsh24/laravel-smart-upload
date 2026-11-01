@@ -162,26 +162,14 @@ trait HasUploadPurge
         $purgeCallback = function () use ($path) {
             Upload::delete($path);
 
-            // Auto-purge sibling variants if present (e.g. filename_thumb.webp, filename_mobile.webp)
-            $dir = pathinfo($path, PATHINFO_DIRNAME);
-            $filename = pathinfo($path, PATHINFO_FILENAME);
-            $ext = pathinfo($path, PATHINFO_EXTENSION);
-
-            if ($filename !== '') {
-                $storage = Storage::disk(config('smart-upload.disk', config('filesystems.default', 'public')));
-                $scanDir = ($dir && $dir !== '.') ? $dir : '';
-
-                try {
-                    $filesInDir = $storage->files($scanDir);
-                    $prefixPattern = ($scanDir ? "{$scanDir}/" : "") . "{$filename}_";
-
-                    foreach ($filesInDir as $siblingFile) {
-                        if (str_starts_with($siblingFile, $prefixPattern)) {
-                            $storage->delete($siblingFile);
-                        }
+            // Auto-purge sibling variants without performing broad directory scans
+            if (is_string($path) && !str_starts_with($path, 'http://') && !str_starts_with($path, 'https://')) {
+                $knownVariants = config('smart-upload.variant_names', ['thumb', 'thumbnail', 'mobile', 'tablet', 'desktop', 'hd', 'small', 'medium', 'large']);
+                foreach ($knownVariants as $vName) {
+                    $vPath = Upload::variantPath($path, $vName);
+                    if ($vPath !== $path) {
+                        Upload::delete($vPath);
                     }
-                } catch (\Throwable) {
-                    // Gracefully ignore directory scan issues on restricted disks
                 }
             }
         };
