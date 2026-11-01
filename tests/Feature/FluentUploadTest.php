@@ -544,4 +544,17 @@ class FluentUploadTest extends TestCase
 
         @unlink($fakeImage);
     }
+
+    public function test_fake_pdf_with_html_payload_enforces_strict_csp_sandbox(): void
+    {
+        Storage::fake('local');
+        // Store an HTML script disguised as a .pdf extension
+        Storage::disk('local')->put('documents/evil.pdf', '<html><script>alert("XSS")</script></html>');
+
+        $response = Upload::response('documents/evil.pdf', disk: 'local');
+        $this->assertInstanceOf(\Symfony\Component\HttpFoundation\StreamedResponse::class, $response);
+
+        // Since it is NOT a genuine application/pdf, CSP sandbox MUST be enforced!
+        $this->assertStringContainsString('sandbox', (string) $response->headers->get('content-security-policy'));
+    }
 }

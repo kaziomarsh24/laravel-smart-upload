@@ -434,8 +434,9 @@ $urls = $result->variantUrls();
 ```
 
 > [!TIP]
-> **SEO-First Naming & Memory Cascade:**
+> **SEO-First Naming, Memory Cascade & Custom Variant Registration:**
 > Variant files are automatically named using `{clean-slug}_{token}_{variant}.{ext}` so Google Image search indexes your product keyword first. They are processed using high-to-low dimensional cascading, ensuring your server never runs out of RAM.
+> If you define custom variant keys beyond standard names (e.g. `og`, `card`), ensure they are registered in `config/smart-upload.php` under `'variant_names'` so model auto-purge can clean them up during updates or deletions.
 
 ### 1.12 Private File Downloads & Temporary Signed Cloud URLs
 Handle confidential documents (National IDs, invoices, contracts) stored in private local (`storage/app/`) or S3/R2 storage with zero boilerplate:

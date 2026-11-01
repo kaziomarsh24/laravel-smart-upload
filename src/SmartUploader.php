@@ -307,12 +307,27 @@ class SmartUploader implements UploaderInterface
             if (!empty($this->variantDefinitions) && is_array($this->variantDefinitions)) {
                 $baseNameWithoutExt = pathinfo($filename, PATHINFO_FILENAME);
 
-                // Sort variants descending by target dimension to enable memory-friendly cascading downscale
+                // Sort variants descending by maximum target dimension (max of width/height) to enable memory-friendly cascading downscale
                 $sortedVariants = $this->variantDefinitions;
                 uasort($sortedVariants, function ($a, $b) {
-                    $dimA = $a['scale_down'][0] ?? ($a['scale_down'] ?? ($a['fit'][0] ?? 0));
-                    $dimB = $b['scale_down'][0] ?? ($b['scale_down'] ?? ($b['fit'][0] ?? 0));
-                    return $dimB <=> $dimA;
+                    $extractMax = function ($opts) {
+                        $w = 0;
+                        $h = 0;
+                        if (isset($opts['scale_down'])) {
+                            if (is_array($opts['scale_down'])) {
+                                $w = (int) ($opts['scale_down'][0] ?? 0);
+                                $h = (int) ($opts['scale_down'][1] ?? 0);
+                            } else {
+                                $w = (int) $opts['scale_down'];
+                            }
+                        } elseif (isset($opts['fit']) && is_array($opts['fit'])) {
+                            $w = (int) ($opts['fit'][0] ?? 0);
+                            $h = (int) ($opts['fit'][1] ?? 0);
+                        }
+                        return max($w, $h);
+                    };
+
+                    return $extractMax($b) <=> $extractMax($a);
                 });
 
                 // Keep working image instance in memory and cascade resize
@@ -638,13 +653,24 @@ class SmartUploader implements UploaderInterface
             throw new \KaziOmar\SmartUpload\Exceptions\UploadException("File not found on disk [{$targetDisk}]: {$path}");
         }
 
-        // Apply secure browser headers by default for inline previews (avoiding sandbox on PDF to allow browser PDF viewers)
-        $isPdf = str_ends_with(strtolower($actualPath), '.pdf');
+        // Verify true MIME type to prevent fake extensions (e.g. evil.html renamed to evil.pdf)
+        $trueMime = '';
+        try {
+            $trueMime = strtolower((string) $storage->mimeType($actualPath));
+        } catch (\Throwable) {
+            $trueMime = '';
+        }
+
+        $isGenuinePdf = ($trueMime === 'application/pdf');
+
+        // Apply secure browser headers by default for inline previews (avoiding sandbox ONLY on genuine PDFs to allow native browser viewers)
         $defaultHeaders = [
             'X-Content-Type-Options' => 'nosniff',
         ];
 
-        if (!$isPdf) {
+        if ($isGenuinePdf) {
+            $defaultHeaders['Content-Type'] = 'application/pdf';
+        } else {
             $defaultHeaders['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
         }
 

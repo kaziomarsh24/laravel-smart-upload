@@ -84,6 +84,8 @@ class SecuritySanitizer
             'application/x-msdos-program',
             'application/x-sh',
             'text/x-shellscript',
+            'text/html',
+            'application/xhtml+xml',
         ];
 
         // If shell scripts are explicitly permitted via allowed_extensions, relax shell script MIME blocking

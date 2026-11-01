@@ -19,8 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Improvements
 - **Aspect Ratio Isolation on Fit Variants:** Wrapped `workingImage` with `clone` during `fit()` crop processing, guaranteeing subsequent `scale_down` variants preserve the original aspect ratio without being affected by preceding crops.
-- **Chrome-Friendly Inline PDF Streaming:** Dynamically relaxes CSP sandbox header on `.pdf` files in `Upload::response()` so browser PDF viewers can render previews natively while maintaining strict sandbox on image files.
-- Expanded test suite to **67 test cases and 226 assertions (100% pass rate)**.
+- **True MIME-Verified PDF Streaming (Stored XSS Defense):** `Upload::response()` now verifies the actual magic-bytes MIME type (`application/pdf`) rather than just the file extension, enforcing strict CSP sandbox on disguised HTML payloads. Added `text/html` and `application/xhtml+xml` to `SecuritySanitizer` forbidden MIME blacklist.
+- **Multi-Dimensional Cascade Sorter:** Variant processing cascade now evaluates `max(width, height)` rather than width alone, correctly ordering portrait/vertical images.
+- **Intervention Image v4 Support:** Extended package requirements to support both `intervention/image` `^3.0` and `^4.0`.
+- Expanded test suite to **68 test cases and 228 assertions (100% pass rate)**.
 
 ## [1.0.3] - 2026-10-29
 
