@@ -317,7 +317,8 @@ $result = Upload::file($request->file('document'))->save('contracts');
 Prevent storage disks from accumulating orphaned files when users update pictures:
 
 ```php
-// Automatically deletes $user->avatar from disk upon successful upload of the new avatar:
+// Automatically deletes $user->avatar (and all its responsive variants like _thumb, _mobile) 
+// from disk upon successful upload of the new avatar:
 $result = Upload::file($request->file('avatar'))
     ->replace($user->avatar)
     ->preset('avatar')
@@ -325,6 +326,10 @@ $result = Upload::file($request->file('avatar'))
 
 $user->update(['avatar' => $result->path]);
 ```
+
+> [!NOTE]
+> **Automatic Variant Cascade in `->replace()`:**
+> When you replace an image, Smart Upload automatically purges both the primary image and any generated sibling variants (e.g. `pic_thumb.webp`, `pic_mobile.webp`) without requiring you to pass variant paths manually.
 
 > [!NOTE]
 > **Do I need `->replace()` if I use the `HasUploadPurge` trait on my Model?**
@@ -391,7 +396,11 @@ $url = Upload::url($user->avatar, fallback: 'https://placehold.co/150x150.png');
 $url = upload_url($product->image, variant: 'thumb');
 // https://example.com/storage/products/shirt_xyz_thumb.webp
 
-// 6. Global helper function anywhere in Blade views or resources:
+// 6. External URLs (Google OAuth, Unsplash) are safely preserved untouched:
+$url = upload_url('https://lh3.googleusercontent.com/avatar.jpg', variant: 'thumb');
+// https://lh3.googleusercontent.com/avatar.jpg
+
+// 7. Global helper function anywhere in Blade views or resources:
 echo upload_url($user->avatar);
 ```
 
