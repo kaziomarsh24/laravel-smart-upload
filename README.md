@@ -49,7 +49,9 @@ if ($chunk->isComplete()) {
   - [1.8 Named Presets (`->preset()`)](#18-named-presets--preset)
   - [1.9 Multi-Disk Routing (Local, S3, R2, Spaces)](#19-multi-disk-routing-local-s3-r2-spaces)
   - [1.10 Universal Media URL Formatter (`Upload::url()`)](#110-universal-media-url-formatter-uploadurl--upload_url)
-  - [1.11 Manual File Deletion (`Upload::delete()`)](#111-manual-file-deletion-uploaddelete)
+  - [1.11 Multi-Size Responsive Image Variants (`->variants()`)](#111-multi-size-responsive-image-variants--variants)
+  - [1.12 Private File Downloads & Temporary Signed Cloud URLs](#112-private-file-downloads--temporary-signed-cloud-urls)
+  - [1.13 Polymorphic File Deletion (`Upload::delete()`)](#113-polymorphic-file-deletion-uploaddelete)
 - [Layer 2: Strict Security & Defense-in-Depth Shield](#layer-2-strict-security--defense-in-depth-shield)
   - [2.1 Real MIME Magic-Bytes Inspection](#21-real-mime-magic-bytes-inspection)
   - [2.2 Anti-Path Traversal & Null-Byte Protection](#22-anti-path-traversal--null-byte-protection)
@@ -205,6 +207,7 @@ Every method in the builder chain is **order-independent** and serves a specific
 | **`->scaleDown($w, $h)`** | Banners, article heroes, and gallery photos. Downscales preserving aspect ratio; **never stretches smaller images**. | Don't use when you need an exact square crop with zero letterboxing. | `->fit($width, $height)` |
 | **`->fit($w, $h)`** | Square profile avatars, thumbnails, or icons. Smartly center-crops to fill exact dimensions. | Don't use when cropping out image edges is unacceptable (e.g. panoramic landscapes). | `->scaleDown($w, $h)` |
 | **`->preset($name)`** | Reusable sizing/quality configs (e.g. `avatar`, `banner`) declared once in `config/smart-upload.php`. | Unnecessary for one-off custom dimensions. | Manually chaining `->fit()->toWebp()` |
+| **`->variants(array $v)`** | Generate responsive image sizes (e.g. `mobile`, `tablet`, `thumb`) in one fluent pass. | Don't use when only a single standard image resolution is needed. | `->scaleDown()` or `->fit()` |
 | **`->disk($disk)`** | Route this specific upload to cloud storage (`s3`, `r2`, `spaces`) or private disk. | Unnecessary if storing to the default disk configured in `smart-upload.php`. | Set `'disk' => 's3'` globally in config |
 | **`->replace($oldPath)`** | Auto-delete previous file from disk upon successful save (e.g. updating avatar via `DB::table()`). | **NEVER needed if your model uses `HasUploadPurge`!** (The trait auto-deletes old files upon `$user->update()`). | Use `HasUploadPurge` trait on Model |
 | **`->temporary()`** | Stage upload in isolated temp storage during multi-step registration or SPA wizards. | Don't use for standard, immediate form submissions. | `Upload::temp($file)` one-liner |
@@ -415,10 +418,18 @@ $result = Upload::file($request->file('banner'))
 // 2. Full URLs for all variants:
 $urls = $result->variantUrls();
 // $urls['mobile'] => 'https://example.com/storage/banners/banner_a8Fk_mobile.webp'
+
+// 3. In Blade templates using the global upload_url helper:
+// <source media="(max-width: 480px)" srcset="{{ upload_url($banner->image, variant: 'mobile') }}">
+// <img src="{{ upload_url($banner->image) }}" alt="Banner">
 ```
 
+> [!TIP]
+> **SEO-First Naming & Memory Cascade:**
+> Variant files are automatically named using `{clean-slug}_{token}_{variant}.{ext}` so Google Image search indexes your product keyword first. They are processed using high-to-low dimensional cascading, ensuring your server never runs out of RAM.
+
 ### 1.12 Private File Downloads & Temporary Signed Cloud URLs
-Handle confidential documents (National IDs, invoices, contracts) stored in private local or S3/R2 storage with zero boilerplate:
+Handle confidential documents (National IDs, invoices, contracts) stored in private local (`storage/app/`) or S3/R2 storage with zero boilerplate:
 
 ```php
 use KaziOmar\SmartUpload\Facades\Upload;
@@ -433,6 +444,10 @@ return Upload::response('invoices/inv_102.pdf', disk: 'local');
 $signedUrl = Upload::temporaryUrl('private/tax_doc.pdf', expiration: 15, disk: 's3');
 return redirect($signedUrl);
 ```
+
+> [!NOTE]
+> **Securing Private Paths:**
+> Files stored on the `local` disk (`storage/app/`) or private cloud buckets are not publicly accessible via web browsers. Use `Upload::download()` to stream files to authenticated users after verifying authorization checks (e.g. `$this->authorize('view', $document)`).
 
 ### 1.13 Polymorphic File Deletion (`Upload::delete()`)
 When you want to explicitly delete files from disk without relying on model events:
