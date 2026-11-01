@@ -59,6 +59,7 @@ if ($chunk->isComplete()) {
   - [2.4 SVG XSS Sanitization](#24-svg-xss-sanitization)
   - [2.5 EXIF & Geolocation Metadata Stripping](#25-exif--geolocation-metadata-stripping)
   - [2.6 Cryptographic Entropy & Safe Slug Naming](#26-cryptographic-entropy--safe-slug-naming)
+  - [2.7 Executable Extension Blacklist & Whitelist Overrides](#27-executable-extension-blacklist--whitelist-overrides)
 - [Layer 3: Atomic Database Rollback Shield (Ghost File Protection)](#layer-3-atomic-database-rollback-shield-ghost-file-protection)
   - [3.1 The Ghost File Problem in Cloud Storage](#31-the-ghost-file-problem-in-cloud-storage)
   - [3.2 Automatic Transaction Level Detection](#32-automatic-transaction-level-detection)
@@ -507,6 +508,17 @@ Attackers often rename malicious scripts (e.g., `backdoor.php` to `photo.jpg`) t
 
 ### 2.6 Cryptographic Entropy & Safe Slug Naming
 * Files are renamed using sanitized URL slugs concatenated with a 12-character high-entropy random string, eliminating collision and guessable filename vulnerabilities.
+
+### 2.7 Executable Extension Blacklist & Whitelist Overrides
+By default, Smart Upload blocks a baseline of executable extensions (`php`, `exe`, `sh`, `bat`, `py`, `js`, `html`, etc.) in `config/smart-upload.php`.
+* **Disallowed Extensions (`disallowed_extensions`):** You can append extra extensions to forbid (e.g. `vbs`, `jar`).
+* **Allowed Extensions Override (`allowed_extensions`):** Useful for developer portals or specific projects where scripts (e.g. `.py`, `.sh`) are deliberately permitted. Any extension added here bypasses extension and MIME blocks.
+* **Unbypassable Exploit Guard:** Critical server execution exploits (`php`, `phar`, `htaccess`) can **never** be whitelisted. Smart Upload permanently rejects them even if configured in `allowed_extensions`.
+
+```php
+// config/smart-upload.php
+'allowed_extensions' => ['py'], // Permitted for a Python tutorial platform
+```
 
 ---
 
