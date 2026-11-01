@@ -88,9 +88,12 @@ class SecuritySanitizer
             'application/xhtml+xml',
         ];
 
-        // If shell scripts are explicitly permitted via allowed_extensions, relax shell script MIME blocking
+        // If shell scripts or HTML are explicitly permitted via allowed_extensions, relax their MIME blocking
         if (in_array('sh', $this->allowedExtensions, true) || in_array('bash', $this->allowedExtensions, true)) {
             $forbiddenMimes = array_values(array_diff($forbiddenMimes, ['application/x-sh', 'text/x-shellscript']));
+        }
+        if (in_array('html', $this->allowedExtensions, true) || in_array('htm', $this->allowedExtensions, true)) {
+            $forbiddenMimes = array_values(array_diff($forbiddenMimes, ['text/html', 'application/xhtml+xml']));
         }
 
         if (in_array($realMime, $forbiddenMimes, true)) {
