@@ -328,7 +328,8 @@ class SmartUploader implements UploaderInterface
                     $variantPath = $targetDir ? "{$targetDir}/{$variantFilename}" : $variantFilename;
 
                     if (isset($variantOptions['fit']) && is_array($variantOptions['fit'])) {
-                        $variantImage = $this->imageProcessor->fit($workingImage, $variantOptions['fit'][0], $variantOptions['fit'][1] ?? $variantOptions['fit'][0]);
+                        // Fit/crop must operate on a clone so it does not mutate workingImage aspect ratio for subsequent variants
+                        $variantImage = $this->imageProcessor->fit(clone $workingImage, $variantOptions['fit'][0], $variantOptions['fit'][1] ?? $variantOptions['fit'][0]);
                     } elseif (isset($variantOptions['scale_down'])) {
                         $scaleParams = is_array($variantOptions['scale_down']) ? $variantOptions['scale_down'] : [$variantOptions['scale_down'], null];
                         $workingImage = $this->imageProcessor->scaleDown($workingImage, $scaleParams[0], $scaleParams[1] ?? null);
@@ -637,11 +638,15 @@ class SmartUploader implements UploaderInterface
             throw new \KaziOmar\SmartUpload\Exceptions\UploadException("File not found on disk [{$targetDisk}]: {$path}");
         }
 
-        // Apply secure browser headers by default for inline previews
+        // Apply secure browser headers by default for inline previews (avoiding sandbox on PDF to allow browser PDF viewers)
+        $isPdf = str_ends_with(strtolower($actualPath), '.pdf');
         $defaultHeaders = [
             'X-Content-Type-Options' => 'nosniff',
-            'Content-Security-Policy' => "default-src 'none'; style-src 'unsafe-inline'; sandbox",
         ];
+
+        if (!$isPdf) {
+            $defaultHeaders['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+        }
 
         return $storage->response($actualPath, headers: array_merge($defaultHeaders, $headers));
     }

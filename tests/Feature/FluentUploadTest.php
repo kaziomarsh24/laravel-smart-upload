@@ -513,4 +513,35 @@ class FluentUploadTest extends TestCase
 
         @unlink($fakeImage);
     }
+
+    public function test_cascade_variant_processing_preserves_aspect_ratio_after_fit(): void
+    {
+        // 1600x1200 image (4:3 aspect ratio)
+        $fakeImage = $this->createFakeImage('photo_4_3.jpg', 1600, 1200);
+        $file = new UploadedFile($fakeImage, 'photo_4_3.jpg', 'image/jpeg', null, true);
+
+        // 'og' is a large fit (1200x630, ~1.9:1 aspect ratio), and 'mobile' is a scale_down (480 wide)
+        $result = Upload::file($file)
+            ->variants([
+                'og'     => ['fit' => [1200, 630]],
+                'mobile' => ['scale_down' => 480],
+            ])
+            ->save('posts');
+
+        $manager = new \Intervention\Image\ImageManager(new \Intervention\Image\Drivers\Gd\Driver());
+
+        // Verify og is exact 1200x630
+        $ogRaw = Storage::disk('public')->get($result->variants['og']);
+        $ogImage = $manager->read($ogRaw);
+        $this->assertEquals(1200, $ogImage->width());
+        $this->assertEquals(630, $ogImage->height());
+
+        // Verify mobile preserved the original 4:3 aspect ratio (480x360), NOT the cropped 1.9:1 ratio!
+        $mobileRaw = Storage::disk('public')->get($result->variants['mobile']);
+        $mobileImage = $manager->read($mobileRaw);
+        $this->assertEquals(480, $mobileImage->width());
+        $this->assertEquals(360, $mobileImage->height());
+
+        @unlink($fakeImage);
+    }
 }

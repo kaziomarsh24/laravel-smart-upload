@@ -18,7 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Visual Architecture Diagrams:** Added rich sequence diagrams for Database Transaction Rollback Flow and Mobile/SPA Camera 2-Step Upload Flow under `art/`.
 
 ### Improvements
-- Expanded test suite to **66 test cases and 222 assertions (100% pass rate)**.
+- **Aspect Ratio Isolation on Fit Variants:** Wrapped `workingImage` with `clone` during `fit()` crop processing, guaranteeing subsequent `scale_down` variants preserve the original aspect ratio without being affected by preceding crops.
+- **Chrome-Friendly Inline PDF Streaming:** Dynamically relaxes CSP sandbox header on `.pdf` files in `Upload::response()` so browser PDF viewers can render previews natively while maintaining strict sandbox on image files.
+- Expanded test suite to **67 test cases and 226 assertions (100% pass rate)**.
 
 ## [1.0.3] - 2026-10-29
 
