@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
   <defs>
     <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#06B6D4"/>
-      <stop offset="100%" stop-color="#0891B2"/>
+      <stop offset="0%" stop-color="#FF2D20"/>
+      <stop offset="100%" stop-color="#E11D48"/>
     </linearGradient>
     <linearGradient id="accent-grad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#FFFFFF"/>
-      <stop offset="100%" stop-color="#ECFEFF"/>
+      <stop offset="100%" stop-color="#FFE4E6"/>
     </linearGradient>
     <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#06B6D4" flood-opacity="0.35"/>
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#FF2D20" flood-opacity="0.35"/>
     </filter>
   </defs>
 
@@ -17,12 +17,13 @@
   <rect x="12" y="12" width="104" height="104" rx="28" fill="url(#bg-grad)" filter="url(#shadow)"/>
   
   <!-- Subtle Internal Border -->
-  <rect x="13.5" y="13.5" width="101" height="101" rx="26.5" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="1.5"/>
+  <rect x="13.5" y="13.5" width="101" height="101" rx="26.5" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1.5"/>
 
   <!-- Upward Dynamic Arrow -->
   <path d="M64 34L40 58H54V80C54 83.3137 56.6863 86 60 86H68C71.3137 86 74 83.3137 74 80V58H88L64 34Z" fill="url(#accent-grad)"/>
 
   <!-- Speed / Shield Accent Plate -->
-  <path d="M42 94C42 91.7909 43.7909 90 46 90H82C84.2091 90 86 91.7909 86 94C86 96.2091 84.2091 98 82 98H46C43.7909 98 42 96.2091 42 94Z" fill="#FFFFFF" fill-opacity="0.85"/>
-  <circle cx="64" cy="94" r="2.5" fill="#0891B2"/>
+  <path d="M42 94C42 91.7909 43.7909 90 46 90H82C84.2091 90 86 91.7909 86 94C86 96.2091 84.2091 98 82 98H46C43.7909 98 42 96.2091 42 94Z" fill="#FFFFFF" fill-opacity="0.75"/>
+  <circle cx="64" cy="94" r="2.5" fill="#FF2D20"/>
 </svg>
+
