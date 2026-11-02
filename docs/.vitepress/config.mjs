@@ -7,6 +7,10 @@ export default defineConfig({
   cleanUrls: true,
   lastUpdated: true,
 
+  markdown: {
+    lineNumbers: true
+  },
+
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/laravel-smart-upload/logo.svg' }],
     ['meta', { name: 'theme-color', content: '#ff2d20' }],
@@ -18,6 +22,30 @@ export default defineConfig({
   themeConfig: {
     siteTitle: 'Smart Upload',
     logo: '/logo.svg',
+
+    outline: {
+      level: [2, 3],
+      label: 'On this page'
+    },
+
+    editLink: {
+      pattern: 'https://github.com/kaziomarsh24/laravel-smart-upload/edit/main/docs/:path',
+      text: 'Edit this page on GitHub'
+    },
+
+    docFooter: {
+      prev: 'Previous page',
+      next: 'Next page'
+    },
+
+    lastUpdated: {
+      text: 'Last updated',
+      formatOptions: {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      }
+    },
+
     nav: [
       { text: 'Docs', link: '/guide/getting-started' },
       { text: 'Cheat Sheet', link: '/guide/cheat-sheet' },
@@ -88,4 +116,3 @@ export default defineConfig({
     }
   }
 });
-
