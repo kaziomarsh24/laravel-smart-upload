@@ -1,6 +1,7 @@
 # Laravel Smart Upload
 
 [![Run Tests](https://github.com/kaziomarsh24/laravel-smart-upload/actions/workflows/run-tests.yml/badge.svg)](https://github.com/kaziomarsh24/laravel-smart-upload/actions)
+[![Documentation](https://img.shields.io/badge/docs-online-blue?style=flat-square&logo=gitbook&logoColor=white)](https://kaziomarsh24.github.io/laravel-smart-upload/)
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/thekaziomar/laravel-smart-upload.svg?style=flat-square)](https://packagist.org/packages/thekaziomar/laravel-smart-upload)
 [![Total Downloads](https://img.shields.io/packagist/dt/thekaziomar/laravel-smart-upload.svg?style=flat-square)](https://packagist.org/packages/thekaziomar/laravel-smart-upload)
 [![PHP Version](https://img.shields.io/badge/PHP-8.2%20to%208.5+-777BB4.svg?style=flat-square)](https://php.net)

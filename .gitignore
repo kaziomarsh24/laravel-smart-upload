@@ -1,3 +1,6 @@
+.DS_Store
+*/.DS_Store
+/node_modules
 /vendor
 composer.lock
 .phpunit.result.cache
@@ -5,3 +8,7 @@ composer.lock
 .idea
 .vscode
 *.log
+
+# VitePress Build & Cache
+docs/.vitepress/dist
+docs/.vitepress/cache

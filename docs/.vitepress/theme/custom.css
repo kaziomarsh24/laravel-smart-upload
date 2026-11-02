@@ -1,0 +1,228 @@
+/**
+ * VitePress Enterprise Theme Customizations
+ */
+:root {
+  --vp-c-brand-1: #e11d48;
+  --vp-c-brand-2: #be123c;
+  --vp-c-brand-3: #9f1239;
+  --vp-c-brand-soft: rgba(225, 29, 72, 0.08);
+  --vp-font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: -webkit-linear-gradient(120deg, #e11d48 30%, #fb7185);
+}
+
+.dark {
+  --vp-c-brand-1: #ff2d20;
+  --vp-c-brand-2: #ef4444;
+  --vp-c-brand-3: #dc2626;
+  --vp-c-brand-soft: rgba(239, 68, 68, 0.12);
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: -webkit-linear-gradient(120deg, #ff2d20 20%, #fca5a5);
+}
+
+/* Hero Section Enhancements */
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 14px;
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--vp-c-brand-1);
+  background: var(--vp-c-brand-soft);
+  border: 1px solid rgba(225, 29, 72, 0.2);
+  margin-bottom: 0.85rem;
+}
+
+.dark .hero-badge {
+  border-color: rgba(255, 45, 32, 0.25);
+}
+
+.VPHomeHero .name {
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.VPHomeHero .tagline {
+  max-width: 680px;
+  margin: 1.5rem auto 0 auto;
+  line-height: 1.6;
+  font-size: 1.15rem;
+  color: var(--vp-c-text-2);
+}
+
+/* Feature Cards */
+.VPFeature {
+  border: 1px solid var(--vp-c-divider) !important;
+  background-color: var(--vp-c-bg-soft) !important;
+  border-radius: 12px !important;
+  transition: all 0.25s ease-in-out !important;
+}
+
+.VPFeature:hover {
+  border-color: var(--vp-c-brand-1) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.08);
+}
+
+.dark .VPFeature:hover {
+  box-shadow: 0 12px 28px -10px rgba(255, 45, 32, 0.12);
+}
+
+.VPFeature .icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.VPFeature .icon svg {
+  width: 22px;
+  height: 22px;
+  stroke: var(--vp-c-brand-1);
+}
+
+.VPFeature .title {
+  font-size: 1.05rem !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em;
+}
+
+.VPFeature .details {
+  font-size: 0.92rem !important;
+  line-height: 1.55 !important;
+  color: var(--vp-c-text-2);
+}
+
+/* Modern Documentation Badges & Stat Cards */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin: 2.5rem 0;
+}
+
+.stat-card {
+  padding: 1.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg-soft);
+  text-align: center;
+}
+
+.stat-number {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: var(--vp-c-brand-1);
+  letter-spacing: -0.03em;
+  margin-bottom: 0.25rem;
+}
+
+.stat-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vp-c-text-2);
+}
+
+.stat-desc {
+  font-size: 0.82rem;
+  color: var(--vp-c-text-3);
+  margin-top: 0.35rem;
+}
+
+/* Centered Comparison Table Section */
+.comparison-section {
+  margin: 4.5rem auto;
+  max-width: 960px;
+}
+
+.comparison-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.comparison-header h2 {
+  font-size: 1.85rem !important;
+  font-weight: 700 !important;
+  border-top: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  letter-spacing: -0.02em;
+}
+
+.comparison-header p {
+  color: var(--vp-c-text-2);
+  margin-top: 0.5rem;
+  font-size: 1.05rem;
+}
+
+.comparison-table-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+}
+
+.vp-doc .comparison-table-wrapper table {
+  display: table !important;
+  width: 100% !important;
+  max-width: 960px !important;
+  margin: 0 auto !important;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--vp-c-bg-soft);
+}
+
+.vp-doc .comparison-table-wrapper tr:last-child td:first-child {
+  border-bottom-left-radius: 12px;
+}
+
+.vp-doc .comparison-table-wrapper tr:last-child td:last-child {
+  border-bottom-right-radius: 12px;
+}
+
+.vp-doc .comparison-table-wrapper th {
+  background: var(--vp-c-bg-alt);
+  font-size: 0.95rem;
+  padding: 14px 18px;
+  font-weight: 600;
+  border-bottom: 2px solid var(--vp-c-divider);
+}
+
+.vp-doc .comparison-table-wrapper td {
+  padding: 13px 18px;
+  font-size: 0.92rem;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.vp-doc .comparison-table-wrapper tr:last-child td {
+  border-bottom: none;
+}
+
+.vp-doc .comparison-table-wrapper th:not(:first-child),
+.vp-doc .comparison-table-wrapper td:not(:first-child) {
+  text-align: center;
+}
+
+/* Highlight the Smart Upload column */
+.vp-doc .comparison-table-wrapper th:last-child {
+  color: var(--vp-c-brand-1);
+}
+
+.vp-doc .comparison-table-wrapper td:last-child {
+  font-weight: 600;
+  color: var(--vp-c-brand-1);
+  background: var(--vp-c-brand-soft);
+}
+
+
