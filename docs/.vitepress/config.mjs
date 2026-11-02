@@ -13,7 +13,7 @@ export default defineConfig({
 
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/laravel-smart-upload/logo.svg' }],
-    ['meta', { name: 'theme-color', content: '#ff2d20' }],
+    ['meta', { name: 'theme-color', content: '#06b6d4' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'Laravel Smart Upload' }],
     ['meta', { property: 'og:description', content: 'Fast, zero-database file uploads and chunk streaming for Laravel.' }]
